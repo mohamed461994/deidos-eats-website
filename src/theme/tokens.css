@@ -1,0 +1,67 @@
+/**
+ * Púca Pizza design tokens — the single place the placeholder brand lives.
+ *
+ * Every color / radius / shadow / motion value components use comes from here
+ * (via the Tailwind @theme mapping in index.css). Swapping in a real chain
+ * identity means editing this file only — never hardcode oklch/hex in feature
+ * code. See DESIGN.md for the strategy behind each value.
+ */
+:root {
+  /* Surfaces — pure white; warmth lives in brand color + photography, never a beige wash */
+  --color-bg: oklch(1 0 0);
+  --color-surface: oklch(0.956 0.004 140);
+  --color-border: oklch(0.9 0.008 140);
+
+  /* Text */
+  --color-ink: oklch(0.24 0.02 140);
+  --color-muted: oklch(0.47 0.02 140);
+
+  /* Brand — basil (wood-fired green). White text on all basil fills. */
+  --color-basil: oklch(0.4 0.13 143);
+  --color-basil-hover: oklch(0.35 0.12 143);
+  --color-basil-deep: oklch(0.3 0.1 143);
+  --color-basil-tint: oklch(0.96 0.02 143);
+  --color-on-basil: oklch(1 0 0);
+
+  /* Accent — ember (wood-fire heat). Appetite highlights, live-status pulse. */
+  --color-ember: oklch(0.62 0.19 38);
+  --color-ember-tint: oklch(0.96 0.02 38);
+  --color-on-ember: oklch(1 0 0);
+
+  /* Crust — baked gold. Subtle tints, stars, dividers on green. */
+  --color-crust: oklch(0.87 0.06 85);
+  --color-crust-tint: oklch(0.965 0.025 85);
+
+  /* Text & surfaces sitting on basil-deep drench sections */
+  --color-paper: oklch(0.97 0.01 110);
+  --color-paper-muted: oklch(0.97 0.01 110 / 0.72);
+
+  /* Semantic states */
+  --color-success: oklch(0.4 0.13 143);
+  --color-error: oklch(0.55 0.19 25);
+  --color-error-tint: oklch(0.97 0.015 25);
+  --color-warning: oklch(0.7 0.15 70);
+
+  /* Shape — hand-built generosity */
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+
+  /* Elevation — two levels only, soft and neutral */
+  --shadow-raised: 0 1px 2px oklch(0.2 0.02 140 / 0.06);
+  --shadow-floating: 0 8px 30px oklch(0.2 0.02 140 / 0.12);
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --duration-fast: 150ms;
+  --duration-base: 220ms;
+  --duration-slow: 600ms;
+
+  /* Z scale — semantic only */
+  --z-dropdown: 10;
+  --z-sticky: 20;
+  --z-backdrop: 30;
+  --z-modal: 40;
+  --z-toast: 50;
+  --z-tooltip: 60;
+}

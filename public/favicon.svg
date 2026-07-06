@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Basil circle with the ember dot — the wordmark motif, reduced -->
+  <circle cx="16" cy="16" r="15" fill="oklch(0.30 0.10 143)"/>
+  <text x="16" y="22" font-family="system-ui, sans-serif" font-size="17" font-weight="800" text-anchor="middle" fill="oklch(0.97 0.01 110)">P</text>
+  <circle cx="24.5" cy="8.5" r="3" fill="oklch(0.62 0.19 38)"/>
+</svg>

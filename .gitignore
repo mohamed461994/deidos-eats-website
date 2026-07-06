@@ -1,0 +1,8 @@
+node_modules
+dist
+*.local
+.env.development
+.env.production
+.DS_Store
+npm-debug.log*
+.impeccable/
