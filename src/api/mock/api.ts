@@ -38,9 +38,10 @@ function fail(status: number, code: string, message: string): never {
 }
 
 function requireUser(): User {
-  const user = mockStore.user
-  if (!user) fail(401, 'unauthorized', 'Sign in to continue.')
-  return user
+  const email = mockStore.currentEmail
+  if (!email) fail(401, 'unauthorized', 'Sign in to continue.')
+  // Creating the record on first authenticated read IS the first-login sync.
+  return mockStore.syncUser(email)
 }
 
 function findMenuItem(menu: Menu, menuItemId: string): MenuItem | undefined {
@@ -184,7 +185,7 @@ export async function checkout(
 
   let deliveryAddress: Order['deliveryAddress'] = null
   if (request.fulfillmentType === 'delivery') {
-    const address = mockStore.addresses.find((a) => a.id === request.addressId)
+    const address = mockStore.getAddresses(user.email).find((a) => a.id === request.addressId)
     if (!address) fail(422, 'validation_failed', 'Delivery orders need a saved delivery address.')
     deliveryAddress = {
       line1: address.line1,
@@ -234,7 +235,6 @@ export async function checkout(
     statusHistory: [{ status: 'placed', at: now, note: null }],
     placedAt: now,
   }
-  void user
 
   mockStore.addOrder(order)
 
@@ -319,30 +319,28 @@ export async function cancelMyOrder(orderId: string, reason?: string): Promise<O
 
 export async function getMe(): Promise<User> {
   await delay(200)
+  // requireUser runs the first-login sync — a fresh account gets an empty record.
   return requireUser()
 }
 
 export async function updateMe(update: UserUpdate): Promise<User> {
   await delay()
   const user = requireUser()
-  const next: User = {
-    ...user,
-    fullName: update.fullName !== undefined ? update.fullName : user.fullName,
-    phone: update.phone !== undefined ? update.phone : user.phone,
-  }
-  mockStore.setUser(next)
-  return next
+  return mockStore.updateUser(user.email, {
+    ...(update.fullName !== undefined ? { fullName: update.fullName } : {}),
+    ...(update.phone !== undefined ? { phone: update.phone } : {}),
+  })
 }
 
 export async function listMyAddresses(): Promise<Address[]> {
   await delay()
-  requireUser()
-  return [...mockStore.addresses]
+  const user = requireUser()
+  return [...mockStore.getAddresses(user.email)]
 }
 
 export async function createMyAddress(input: AddressCreate): Promise<Address> {
   await delay()
-  requireUser()
+  const user = requireUser()
   const address: Address = {
     id: crypto.randomUUID(),
     label: input.label ?? null,
@@ -353,14 +351,15 @@ export async function createMyAddress(input: AddressCreate): Promise<Address> {
     eircode: input.eircode,
     isDefault: input.isDefault ?? false,
   }
-  mockStore.addAddress(address)
+  mockStore.addAddress(user.email, address)
   return address
 }
 
 export async function deleteMyAddress(addressId: string): Promise<void> {
   await delay()
-  requireUser()
-  if (!mockStore.removeAddress(addressId)) fail(404, 'not_found', 'Address not found.')
+  const user = requireUser()
+  if (!mockStore.removeAddress(user.email, addressId))
+    fail(404, 'not_found', 'Address not found.')
 }
 
 export async function registerDevice(): Promise<void> {

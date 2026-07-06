@@ -79,6 +79,9 @@ export function AccountPage() {
   const [addingAddress, setAddingAddress] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
+  // Read the display name from the already-cached /me query (no extra fetch).
+  const fullName = meQuery.data?.fullName?.trim()
+
   if (status === 'signedOut') return <Navigate to="/signin?next=/account" replace />
 
   async function handleDeleteAddress(addressId: string) {
@@ -98,6 +101,7 @@ export function AccountPage() {
     <main className="mx-auto max-w-2xl px-4 pb-24 sm:px-6">
       <header className="pt-10 pb-6">
         <h1 className="display text-[clamp(2rem,4.5vw,3rem)]">Your account</h1>
+        {fullName && <p className="mt-2 font-[650]">{fullName}</p>}
         {email && <p className="mt-2 text-muted">{email}</p>}
       </header>
 

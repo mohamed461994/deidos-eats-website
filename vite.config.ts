@@ -9,6 +9,27 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), 'VITE_')
   const apiProxyTarget = env.VITE_API_BASE_URL?.replace(/\/$/, '')
 
+  // Production build guard — the primary defense against the bug where the site
+  // shipped in-browser fake data instead of the real API (see implementation.md
+  // §0/§7). `vite build` runs in 'production' mode; the dev server ('development')
+  // and vitest ('test') never reach this. An UNSET VITE_API_MODE trips neither
+  // check, so a local build-verify (`npm run build` with no .env.production) still
+  // passes — only an explicit misconfiguration fails the build.
+  if (mode === 'production') {
+    if (env.VITE_API_MODE === 'mock') {
+      throw new Error(
+        'Refusing to build: VITE_API_MODE=mock in a production build. Mock mode serves ' +
+          'in-browser fake data and must never be deployed. Set VITE_API_MODE=live.',
+      )
+    }
+    if (env.VITE_API_MODE === 'live' && !env.VITE_API_BASE_URL) {
+      throw new Error(
+        'Production build in live mode requires VITE_API_BASE_URL (the deployed API origin). ' +
+          'Inject it in the CI build environment / .env.production (see implementation.md §7).',
+      )
+    }
+  }
+
   return {
     plugins: [react(), tailwindcss()],
     define: {

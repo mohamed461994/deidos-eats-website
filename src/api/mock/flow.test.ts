@@ -11,6 +11,7 @@ import { ApiError } from '../errors'
 import {
   cancelMyOrder,
   checkout,
+  createMyAddress,
   getMyOrder,
   listMyOrders,
   mockConfirmCardPayment,
@@ -22,6 +23,10 @@ import { mockStore } from './store'
 const pizzaId = menus[DUBLIN_BRANCH_ID].categories[0].items[0].id
 const ndujaOptionId = menus[DUBLIN_BRANCH_ID].categories[0].items[0].modifierGroups![0].options[1].id
 
+// A brand-new account starts with an empty address book, so delivery tests must
+// create one first — exactly what a real buyer does before ordering.
+let deliveryAddressId: string
+
 async function settle<T>(promise: Promise<T>, ms = 2000): Promise<T> {
   // Attach a handler before advancing timers so an early rejection isn't "unhandled"
   promise.catch(() => {})
@@ -32,8 +37,22 @@ async function settle<T>(promise: Promise<T>, ms = 2000): Promise<T> {
 beforeEach(async () => {
   vi.useFakeTimers()
   localStorage.clear()
-  mockStore.orders.length = 0
+  mockStore.resetForTests()
+  // Sign-in requires a confirmed account (mirrors Cognito), so create one.
+  await settle(mockAuthProvider.signUp('demo@puca.ie', 'a-long-password!', 'Demo Buyer'))
+  await settle(mockAuthProvider.confirmSignUp('demo@puca.ie', '123456'))
   await settle(mockAuthProvider.signIn('demo@puca.ie', 'a-long-password!'))
+  const address = await settle(
+    createMyAddress({
+      label: 'Home',
+      line1: '12 Charleston Avenue',
+      town: 'Ranelagh, Dublin 6',
+      county: 'Dublin',
+      eircode: 'D06 C7W2',
+      isDefault: true,
+    }),
+  )
+  deliveryAddressId = address.id
 })
 
 afterEach(() => {
@@ -45,7 +64,7 @@ describe('mock ordering flow', () => {
     const priced = await settle(
       validateCart(DUBLIN_BRANCH_ID, {
         fulfillmentType: 'delivery',
-        addressId: mockStore.addresses[0].id,
+        addressId: deliveryAddressId,
         lines: [{ menuItemId: pizzaId, quantity: 2, selectedModifierOptionIds: [ndujaOptionId] }],
       }),
     )
@@ -65,7 +84,7 @@ describe('mock ordering flow', () => {
       settle(
         validateCart(DUBLIN_BRANCH_ID, {
           fulfillmentType: 'delivery',
-          addressId: mockStore.addresses[0].id,
+          addressId: deliveryAddressId,
           lines: [{ menuItemId: drinksId, quantity: 1 }],
         }),
       ),
@@ -192,7 +211,7 @@ describe('mock ordering flow', () => {
         {
           branchId: DUBLIN_BRANCH_ID,
           fulfillmentType: 'delivery',
-          addressId: mockStore.addresses[0].id,
+          addressId: deliveryAddressId,
           lines: [{ menuItemId: pizzaId, quantity: 2 }],
           paymentMethod: 'card',
         },

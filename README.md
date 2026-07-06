@@ -15,15 +15,20 @@ npm install
 npm run dev        # http://localhost:5173 (or next free port)
 ```
 
-By default the site runs in **mock mode** (`VITE_API_MODE=mock`): a fully offline,
-in-browser mock of the Deidos Eats API with realistic latency, error codes, a simulated
-kitchen that advances order status, and localStorage persistence. Any email + a 12-char
-password signs in; the confirmation code is any 6 digits.
+The site runs in **live mode** against the **real dev API** — the same backend, Cognito
+pool, and user data as the iOS app. The dev configuration is committed in
+`.env.development` (public identifiers only — API URL, pool/client IDs, Stripe
+publishable key; never secrets), so a fresh clone talks to the real platform with no
+setup. Requests go through the Vite `/api` proxy in dev (the API has no browser CORS
+yet — see `implementation.md` §8). Sign in with the dev test accounts in
+`deidos-eats-api/docs/test-accounts.md`, or sign up a new account (real Cognito email
+confirmation).
 
-For **live mode** copy `.env.development.example` → `.env.development`, fill in the dev
-API/Cognito/Stripe values and set `VITE_API_MODE=live`. Requests go through the Vite
-`/api` proxy in dev. ⚠️ Live mode has backend prerequisites (website Cognito app client,
-CORS) — see `implementation.md`.
+⚠️ **Mock mode is deprecated for running the site** (`implementation.md` §0). It exists
+only so the vitest suite can run offline (`.env.test` pins `VITE_API_MODE=mock`). Never
+run or demo the site in mock mode: its "user data" is browser-localStorage, so profiles,
+addresses, and orders silently diverge from what iOS and the real API see — that bug
+class is exactly why live is now the default.
 
 ## Commands
 
@@ -39,8 +44,9 @@ npm run preview    # serve the production build
 
 - `src/theme/tokens.css` — every brand value (colors, radii, shadows, motion). Swap the
   brand here, nowhere else.
-- `src/api/` — typed API surface: `live.ts` (real endpoints), `mock/` (offline mock),
-  `ws.ts` (order-events socket, live + mock), `types.ts` (contract re-exports).
+- `src/api/` — typed API surface: `live.ts` (real endpoints), `mock/` (offline mock,
+  test-harness only), `ws.ts` (order-events socket, live + mock), `types.ts` (contract
+  re-exports).
 - `src/auth/` — Cognito SRP provider + mock provider behind one interface.
 - `src/cart/` — client-held cart (the platform has no server cart), pure logic + context.
 - `src/pages/` — home, menu, locations, checkout, order tracking, orders, account, auth.

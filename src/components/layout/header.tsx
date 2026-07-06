@@ -1,6 +1,7 @@
 import { ShoppingBag, UserRound } from 'lucide-react'
 import { Link, NavLink } from 'react-router-dom'
 
+import { useMe } from '@/api/queries'
 import { useAuth } from '@/auth/context'
 import { useCart } from '@/cart/context'
 import { formatCents } from '@/lib/money'
@@ -15,6 +16,13 @@ const navLinkClasses = ({ isActive }: { isActive: boolean }) =>
 export function Header() {
   const { itemCount, subtotalCents, openCart } = useCart()
   const { status } = useAuth()
+  const me = useMe()
+
+  // Surface the signed-in user's first name next to the account icon. While /me
+  // is loading, errored, or has no name, `firstName` is empty and we fall back
+  // to the plain icon below — the name simply appears once it's available.
+  const firstName = me.data?.fullName?.trim().split(/\s+/)[0] ?? ''
+  const showName = status === 'signedIn' && firstName !== ''
 
   return (
     <header
@@ -48,10 +56,22 @@ export function Header() {
         <div className="ml-auto flex items-center gap-2">
           <Link
             to={status === 'signedIn' ? '/account' : '/signin'}
-            className="grid size-11 place-items-center rounded-full text-ink transition-colors hover:bg-surface"
-            aria-label={status === 'signedIn' ? 'Your account' : 'Sign in'}
+            className={cn(
+              'rounded-full text-ink transition-colors hover:bg-surface',
+              showName ? 'flex h-11 items-center gap-2 px-3' : 'grid size-11 place-items-center',
+            )}
+            aria-label={
+              status === 'signedIn'
+                ? showName
+                  ? `Your account, ${firstName}`
+                  : 'Your account'
+                : 'Sign in'
+            }
           >
-            <UserRound className="size-5" aria-hidden />
+            <UserRound className="size-5 shrink-0" aria-hidden />
+            {showName && (
+              <span className="max-w-[7rem] truncate text-[15px] font-[550]">{firstName}</span>
+            )}
           </Link>
           <button
             type="button"

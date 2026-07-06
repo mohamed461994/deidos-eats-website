@@ -1,8 +1,45 @@
 # implementation.md — wiring the website to the live Deidos Eats API
 
-This document covers everything needed to take the site from **mock mode** (its current
-default — fully working, offline, no AWS) to **live mode** against the real platform.
 Contract version at time of writing: `@deidos-eats/contracts` **v0.16.0**.
+
+---
+
+## 0. Mode policy — LIVE API ONLY (decision, 2026-07-06)
+
+**The website uses the real API and real data, exactly like the iOS app. Mock mode is
+deprecated for running the site and must never be the mode a person sees.**
+
+Why this is a hard rule: the site originally defaulted to mock whenever `VITE_API_MODE`
+was unset. The mock's "user data" lives in browser localStorage, so the account page
+showed different profile data than iOS did for the same account — it looked like the
+platform had two conflicting user-info endpoints, when in fact there is exactly one
+(`GET /me`) and the website simply wasn't calling it. That failure mode (silently faking
+data instead of failing loudly) is banned.
+
+What enforces it now:
+
+1. **`live` is the code default** (`src/config.ts`): anything other than an explicit
+   `VITE_API_MODE=mock` runs live. An unconfigured build now fails loudly instead of
+   silently showing fake data.
+2. **`.env.development` is committed** (public dev identifiers only — API URL, WS URL,
+   Cognito pool + website client ID, Stripe *publishable* key; never secrets). A fresh
+   clone of this repo talks to the real dev API with zero setup. Keep this file current —
+   it is the single source of dev configuration, same convention as the dashboard repo.
+3. **Mock survives only as the unit-test harness.** `.env.test` (committed) pins
+   `VITE_API_MODE=mock` so the vitest suite stays offline and deterministic. That is the
+   sole legitimate consumer of `src/api/mock/*` and `src/auth/mock.ts`. Do not add new
+   mock features; once live E2E coverage exists, removing mock mode entirely is the
+   end state.
+4. **Same identity as iOS**: shared buyer pool `eu-west-1_iah1mG6kG` with a
+   website-specific app client (`4033eub2av4ulr8mi32gu2evhv`), accepted by the dev API
+   verifier (`COGNITO_WEBSITE_CLIENT_ID` — already deployed on the dev Lambda). Same
+   pool → same `sub` → same `users` row, so profile edits made on the website are the
+   ones iOS sees, and vice versa.
+
+Production builds must be given live values at build time (`.env.production` is not
+committed — the committed dev file is dev-only); the full prod config & secrets story,
+and the build/runtime guards that stop a mock or origin-less prod bundle, are in **§7.1**.
+The remaining backend blocker for a deployed origin is CORS — see §8.
 
 ---
 
@@ -67,8 +104,9 @@ deletion.
 
 ## 2. Integration map (component/flow → endpoint)
 
-All API access goes through `src/api/index.ts`, which picks the **mock** or **live**
-adapter once at startup from `VITE_API_MODE`. Components never know which is active.
+All API access goes through `src/api/index.ts`, which picks the **live** (default) or
+**mock** (test-harness only, §0) adapter once at startup from `VITE_API_MODE`.
+Components never know which is active.
 
 | Flow / component | Calls | Notes |
 |---|---|---|
@@ -89,7 +127,11 @@ adapter once at startup from `VITE_API_MODE`. Components never know which is act
 registers it. Live provider (`src/auth/cognito.ts`) = direct Cognito SRP via
 `amazon-cognito-identity-js` (same flow as dashboard/iOS — no hosted UI; the pool's
 clients have OAuth disabled). Sign-up → email confirmation code → sign-in; password
-policy min 12 + all classes. 401s surface as "session expired" copy.
+policy min 12 + all classes. Confirming an account does **not** create a session (real
+Cognito behaviour) — the app signs in right after (fresh signup) or routes to sign-in
+(re-entry); a throttled "Resend code" action re-sends the email code. On sign-in the app
+prefetches `GET /me` (first-login user sync, fire-and-forget). 401s surface as "session
+expired" copy.
 
 ## 3. State management
 
@@ -128,34 +170,41 @@ policy min 12 + all classes. 401s surface as "session expired" copy.
 **Cash**: `paymentMethod: 'cash'` (only when branch `cashEnabled`) skips Stripe entirely;
 order is placed immediately and the site navigates straight to tracking.
 
-## 5. Currently stubbed / mocked — and exactly what makes each real
+## 5. Mock leftovers — test harness only (see §0)
 
-| Stub | Where | What's needed to go live |
+**Live is the default and only supported mode for running the site.** As of 2026-07-06
+the dev configuration is committed (`.env.development`: live mode, dev API/WS URLs,
+shared buyer pool + website app client, Stripe test publishable key), so nothing below
+is "pending setup" anymore — the mock code paths survive solely because the vitest
+suite runs against them (`.env.test`).
+
+| Mock remnant | Where | Status / end state |
 |---|---|---|
-| Entire API (mock mode) | `src/api/mock/*` | Set `VITE_API_MODE=live` + fill `.env.development`; blocked on CORS + Cognito client (§6/§8) |
-| Auth (mock provider) | `src/auth/mock.ts` | Website Cognito app client (§8.1); then `src/auth/cognito.ts` is already written for the real SRP flow |
-| Card payment (demo button) | checkout page, mock branch | Live mode renders the real Payment Element (`src/components/stripe-payment.tsx`); needs `VITE_STRIPE_PUBLISHABLE_KEY` and an end-to-end test against Stripe test mode |
-| Order-events WS (mock kitchen) | `src/api/ws.ts` mock branch | Set `VITE_WS_URL` to the dev WS endpoint; live branch already implements `?token=` connect + backoff |
-| Simulated kitchen | `src/api/mock/store.ts` | Not a live concern — real status changes come from staff actions via the dashboard |
-| Brand imagery (Unsplash) | `src/lib/brand.ts`, mock menu | Real photography via the platform's CloudFront menu images once a real chain brand exists |
+| Mock API adapter | `src/api/mock/*` | Test harness only. Remove once live E2E coverage replaces the mock flow tests |
+| Mock auth provider | `src/auth/mock.ts` | Test harness only — real SRP flow (`src/auth/cognito.ts`) is what runs |
+| Demo payment button | checkout page, mock branch | Only reachable in test mode; live renders the real Payment Element (`src/components/stripe-payment.tsx`) |
+| Simulated kitchen + WS replay | `src/api/mock/store.ts`, `src/api/ws.ts` mock branch | Test harness only — real status changes come from staff actions via the dashboard |
+| Brand imagery (Unsplash) | `src/lib/brand.ts`, mock menu | Unrelated to API mode — real photography via CloudFront menu images once a real chain brand exists |
 | Web push registration | not wired | See roadmap §9 — `POST /me/devices` with `platform:'web'` exists; needs a service worker + a web-push sender in the push worker |
 
 Nothing is faked silently: mock-only UI is labeled ("Demo mode", "Demo payment — no real
-Stripe") and mock modules are marked `MOCK` in their headers.
+Stripe"), mock modules are marked `MOCK` in their headers, and an unconfigured build
+fails loudly (live default) instead of falling back to fake data.
 
 ## 6. Env vars / config
 
-`.env.development` (copy from `.env.development.example`):
+`.env.development` is **committed** (public dev identifiers only — see §0). Current
+values, kept in sync with the deployed dev platform:
 
-| Var | Dev value | Notes |
+| Var | Dev value (committed) | Notes |
 |---|---|---|
-| `VITE_API_MODE` | `mock` \| `live` | default mock |
+| `VITE_API_MODE` | `live` | live is also the code default; `mock` is test-only (`.env.test`) |
 | `VITE_API_BASE_URL` | `https://izio5wfs4g.execute-api.eu-west-1.amazonaws.com/dev` | dev proxy target (`/api` in the browser); prod has no URL yet |
 | `VITE_WS_URL` | `wss://s65u292zxd.execute-api.eu-west-1.amazonaws.com/dev` | dev WS; no prod stack yet |
-| `VITE_COGNITO_USER_POOL_ID` | `eu-west-1_iah1mG6kG` | shared buyer pool |
-| `VITE_COGNITO_CLIENT_ID` | **needs a new website app client** | do NOT reuse the iOS/dashboard client IDs |
-| `VITE_STRIPE_PUBLISHABLE_KEY` | `pk_test_…` (same key iOS dev uses) | baked at build |
-| `VITE_RESTAURANT_ID` | optional | defaults to first restaurant |
+| `VITE_COGNITO_USER_POOL_ID` | `eu-west-1_iah1mG6kG` | shared buyer pool (same as iOS) |
+| `VITE_COGNITO_CLIENT_ID` | `4033eub2av4ulr8mi32gu2evhv` | website's own app client — do NOT reuse the iOS/dashboard client IDs |
+| `VITE_STRIPE_PUBLISHABLE_KEY` | `pk_test_…` (same key iOS dev uses) | public by design; baked at build |
+| `VITE_RESTAURANT_ID` | (empty) | optional pin; defaults to first restaurant |
 
 Dev test accounts: `deidos-eats-api/docs/test-accounts.md`.
 
@@ -177,13 +226,54 @@ deployment boundary — nothing below has been provisioned.**
 - Cost note: no new always-on resources; CloudFront+S3 only. Do not add an interface
   endpoint / proxy for this.
 
+### 7.1 Production config & secrets — how we avoid the dev env problem in prod
+
+Committing `.env.development` (§0) is a **dev-only** convenience. It must never leak into a
+production deploy. There are two distinct risks; each has its own guard so neither depends
+on someone remembering a rule.
+
+**Risk 1 — shipping mock / fake data** (the original bug: an unset `VITE_API_MODE` fell back
+to mock, so the account page showed browser-local fake data while iOS showed the real
+`GET /me`). Three layers, defense in depth:
+
+1. **Code default is `live`** (`src/config.ts`) — an unset mode can never mean mock again.
+2. **Build fails loud** — `vite build` (production mode) throws if `VITE_API_MODE=mock`, or
+   if it's `live` with no `VITE_API_BASE_URL` (`vite.config.ts`). CI cannot produce a mock or
+   origin-less prod bundle. A local `npm run build` with no prod env is unaffected (unset
+   mode trips neither check).
+3. **Runtime backstop** — a production bundle throws on load if it is somehow in mock mode
+   (`src/config.ts`, gated on `import.meta.env.PROD`). It white-screens with a console error
+   rather than render fake data. *(So the deploy smoke check must actually load the page /
+   read the console — confirming files were emitted is not enough.)*
+
+**Risk 2 — committing or publishing a secret.** `.env.development` is committed precisely
+*because* it holds only public identifiers. Two rules keep prod safe:
+
+- **Committed dev values are dev-only.** Dev API/WS URLs, the dev Cognito pool + dev website
+  app client, and the Stripe **test** key. Never deploy prod with them — prod has its own.
+- **`VITE_*` is public.** Vite bakes every `VITE_*` var into the client bundle that ships to
+  browsers, so a "secret" in a client env file is published **even if the file is
+  gitignored**. This SPA needs *no* secrets: only URLs, Cognito pool/client IDs, and the
+  Stripe **publishable** key (`pk_live_…`). Secret keys (`sk_live_…`), webhook secrets
+  (`whsec_…`), DB passwords, and AWS creds never appear in any `VITE_*` var — they live
+  server-side in Secrets Manager and are read by the API, not the site.
+
+**How prod actually gets its config.** `.env.production` is **gitignored**;
+`.env.production.example` documents the shape. The `deploy-website.yml` GitHub Actions job
+supplies the prod values (public identifiers, from repo **variables** — not secrets) at
+`vite build` time, then uploads `dist/` to S3 + invalidates CloudFront. Same
+build-time-baking pattern as the dashboard and iOS. No prod env file is committed, and
+nothing secret is ever handed to the frontend build. Prod prerequisites still open: a prod
+Cognito website app client, the prod API/WS stack, and the website origin on the API's CORS
+allowlist (§8.2).
+
 ## 8. Backend gaps that block full live functionality (ordered TODO)
 
-1. **Cognito app client for the website** *(blocks all authed flows)* — add a third user
-   pool client (SRP, OAuth disabled, sensible token validity) in `auth-stack.ts`, and add
-   its client ID to the API verifier's accepted list (`COGNITO_*_CLIENT_ID` env wiring in
-   the cloud repo → `createAccessTokenVerifier`). Without this every API call 401s even
-   with a valid pool token.
+1. ~~**Cognito app client for the website**~~ ✅ **DONE (2026-07-06)** — the pool has a
+   website app client (`4033eub2av4ulr8mi32gu2evhv`, committed in `.env.development`),
+   and the dev API Lambda already carries `COGNITO_WEBSITE_CLIENT_ID` in its accepted
+   verifier list (`createAccessTokenVerifier`). Authed flows work in dev through the
+   Vite proxy.
 2. **CORS** *(blocks all browser calls outside the Vite proxy)* — two halves:
    (a) API Gateway `allowedOrigins` must include the website origin(s), and `allowHeaders`
    must add **`Idempotency-Key`** (checkout preflight fails without it);

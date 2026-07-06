@@ -1,7 +1,8 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 
 import { useAuth } from '@/auth/context'
+import { cooldownRemaining } from '@/auth/cooldown'
 import { AuthFlowError } from '@/auth/provider'
 import { Button } from '@/components/ui/button'
 import { TextField } from '@/components/ui/field'
@@ -16,8 +17,8 @@ function MockHint() {
   if (!isMock) return null
   return (
     <p className="rounded-[10px] bg-crust-tint px-4 py-3 text-[13px] text-ink">
-      <strong>Demo mode:</strong> any email works; passwords just need 12+ characters. The
-      confirmation code is any 6 digits.
+      <strong>Demo mode:</strong> sign up with any email and a 12+ character password; the
+      confirmation code is any 6 digits. Sign-in works for accounts created in this browser.
     </p>
   )
 }
@@ -27,6 +28,7 @@ export function SignInPage() {
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const next = params.get('next') ?? '/menu'
+  const justConfirmed = params.get('confirmed') === '1'
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -57,6 +59,11 @@ export function SignInPage() {
       <p className="mt-2 text-muted">Sign in to order and track it live.</p>
       <form onSubmit={handleSubmit} className="mt-8 flex flex-col gap-4" noValidate>
         <MockHint />
+        {justConfirmed && !error && (
+          <p role="status" className="rounded-[10px] bg-basil-tint px-4 py-3 text-[15px] font-[550] text-basil">
+            Email confirmed — sign in to continue.
+          </p>
+        )}
         <TextField
           label="Email"
           type="email"
@@ -93,7 +100,7 @@ export function SignInPage() {
 }
 
 export function SignUpPage() {
-  const { signUp, confirmSignUp } = useAuth()
+  const { signIn, signUp, confirmSignUp, resendConfirmationCode } = useAuth()
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const next = params.get('next') ?? '/menu'
@@ -106,6 +113,23 @@ export function SignUpPage() {
   const [code, setCode] = useState('')
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // "Resend code" is throttled client-side: after a send we disable the button
+  // for RESEND_COOLDOWN_SECONDS and count down. `now` re-renders the countdown.
+  const [resending, setResending] = useState(false)
+  const [resendNotice, setResendNotice] = useState<string | null>(null)
+  const [resendStartedAt, setResendStartedAt] = useState<number | null>(null)
+  const [now, setNow] = useState(() => Date.now())
+  const resendRemaining = cooldownRemaining(resendStartedAt, now)
+
+  useEffect(() => {
+    if (resendStartedAt === null) return
+    const id = setInterval(() => {
+      setNow(Date.now())
+      if (cooldownRemaining(resendStartedAt, Date.now()) <= 0) clearInterval(id)
+    }, 1000)
+    return () => clearInterval(id)
+  }, [resendStartedAt])
 
   async function handleSignUp(event: FormEvent) {
     event.preventDefault()
@@ -129,13 +153,51 @@ export function SignUpPage() {
     event.preventDefault()
     setPending(true)
     setError(null)
+    const confirmEmail = email.trim()
+    const signInTo = `/signin?next=${encodeURIComponent(next)}&confirmed=1`
     try {
-      await confirmSignUp(email.trim(), code.trim())
+      await confirmSignUp(confirmEmail, code.trim())
+    } catch (err) {
+      setError(authErrorMessage(err))
+      setPending(false)
+      return
+    }
+    // Confirming does not create a session. In the fresh-signup flow the password
+    // is still in memory, so sign in immediately. On the `?confirm=` re-entry path
+    // (from the sign-in page) we don't have it — send them to sign in.
+    // SECURITY: the password only ever lives in this component's state, never in
+    // the URL, router state, or storage.
+    if (!password) {
+      navigate(signInTo, { replace: true })
+      setPending(false)
+      return
+    }
+    try {
+      await signIn(confirmEmail, password)
       navigate(next, { replace: true })
+    } catch {
+      // The account is already confirmed; if this sign-in fails (e.g. transient),
+      // don't trap the user on a spent code — hand off to the sign-in page.
+      navigate(signInTo, { replace: true })
+    } finally {
+      setPending(false)
+    }
+  }
+
+  async function handleResend() {
+    if (resendRemaining > 0 || resending) return
+    setResending(true)
+    setError(null)
+    setResendNotice(null)
+    try {
+      await resendConfirmationCode(email.trim())
+      setResendStartedAt(Date.now())
+      setNow(Date.now())
+      setResendNotice('A new code is on its way — check your inbox.')
     } catch (err) {
       setError(authErrorMessage(err))
     } finally {
-      setPending(false)
+      setResending(false)
     }
   }
 
@@ -207,6 +269,17 @@ export function SignUpPage() {
               value={code}
               onChange={(e) => setCode(e.target.value)}
             />
+            <div className="flex items-center gap-3 text-[13px]">
+              <button
+                type="button"
+                onClick={handleResend}
+                disabled={resendRemaining > 0 || resending}
+                className="font-[650] text-basil underline-offset-4 hover:underline disabled:text-muted disabled:no-underline"
+              >
+                {resendRemaining > 0 ? `Resend code in ${resendRemaining}s` : 'Resend code'}
+              </button>
+              {resendNotice && <span role="status" className="text-muted">{resendNotice}</span>}
+            </div>
             {error && (
               <p role="alert" className="rounded-[10px] bg-error-tint px-4 py-3 text-[15px] font-[550] text-error">
                 {error}

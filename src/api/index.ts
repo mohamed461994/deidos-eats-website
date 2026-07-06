@@ -1,7 +1,7 @@
 /**
  * The single API surface consumed by the app. Mode is decided once at startup:
- * `mock` (default) → in-browser mock with the same shapes and error codes;
- * `live` → the real Deidos Eats API.
+ * `live` (default) → the real Deidos Eats API — same data as the iOS app;
+ * `mock` → in-browser mock, ONLY for the unit-test harness (.env.test).
  */
 import { isMock } from '@/config'
 

@@ -9,7 +9,9 @@ import {
   type ReactNode,
 } from 'react'
 
+import { api } from '@/api'
 import { setAccessTokenProvider } from '@/api/http'
+import { queryKeys } from '@/api/queries'
 import { isMock } from '@/config'
 
 import { cognitoAuthProvider } from './cognito'
@@ -27,6 +29,7 @@ interface AuthContextValue {
   signIn: (email: string, password: string) => Promise<void>
   signUp: (email: string, password: string, fullName: string) => Promise<SignUpResult>
   confirmSignUp: (email: string, code: string) => Promise<void>
+  resendConfirmationCode: (email: string) => Promise<void>
   signOut: () => Promise<void>
 }
 
@@ -62,6 +65,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setStatus('signedIn')
       // Fresh identity — drop any per-user cached data from a previous session
       await queryClient.invalidateQueries()
+      // First-login user sync: GET /me creates the user row server-side on first
+      // login (see implementation.md §1). Prefetch it so it runs even when the
+      // user goes straight to checkout with no /me observer mounted. Fire-and-
+      // forget: a /me failure must never block or fail the sign-in itself.
+      void queryClient
+        .prefetchQuery({ queryKey: queryKeys.me, queryFn: () => api.getMe() })
+        .catch(() => {})
     },
     [queryClient],
   )
@@ -73,13 +83,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 
   const confirmSignUp = useCallback(
-    async (confirmEmail: string, code: string) => {
-      await provider.confirmSignUp(confirmEmail, code)
-      setEmail(confirmEmail)
-      setStatus('signedIn')
-      await queryClient.invalidateQueries()
-    },
-    [queryClient],
+    // Confirming an account does NOT establish a session (real Cognito behaviour):
+    // no status/email change here. The caller signs in afterwards to get a session.
+    (confirmEmail: string, code: string) => provider.confirmSignUp(confirmEmail, code),
+    [],
+  )
+
+  const resendConfirmationCode = useCallback(
+    (resendEmail: string) => provider.resendConfirmationCode(resendEmail),
+    [],
   )
 
   const signOut = useCallback(async () => {
@@ -97,9 +109,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signIn,
       signUp,
       confirmSignUp,
+      resendConfirmationCode,
       signOut,
     }),
-    [status, email, signIn, signUp, confirmSignUp, signOut],
+    [status, email, signIn, signUp, confirmSignUp, resendConfirmationCode, signOut],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

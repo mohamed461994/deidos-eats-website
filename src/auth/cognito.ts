@@ -3,9 +3,10 @@
  * user-pool flow the dashboard and iOS app use (no hosted UI; OAuth is
  * disabled on the pool's app clients).
  *
- * ⚠️ LIVE-MODE PREREQUISITE: the pool needs a *website* app client, and the
- * API's token verifier must accept its client ID — currently it only accepts
- * the iOS and dashboard clients. See implementation.md → backend gaps.
+ * The website has its own app client on the shared buyer pool
+ * (VITE_COGNITO_CLIENT_ID in .env.development), and the dev API verifier
+ * accepts it (COGNITO_WEBSITE_CLIENT_ID). Same pool as iOS → same `sub` →
+ * the same `users` row and profile data everywhere.
  */
 import {
   AuthenticationDetails,
@@ -46,6 +47,12 @@ function mapCognitoError(error: unknown): AuthFlowError {
       )
     case 'UserNotConfirmedException':
       return new AuthFlowError('Confirm your email first — check your inbox.', 'not_confirmed')
+    case 'LimitExceededException':
+    case 'TooManyRequestsException':
+      return new AuthFlowError(
+        'Too many attempts — wait a moment and try again.',
+        'rate_limited',
+      )
     default:
       return new AuthFlowError(err.message ?? 'Sign-in failed. Try again.', 'unknown')
   }
@@ -99,6 +106,17 @@ export const cognitoAuthProvider: AuthProvider = {
     const user = new CognitoUser({ Username: email, Pool: pool() })
     return new Promise((resolve, reject) => {
       user.confirmRegistration(code, true, (error) => {
+        if (error) return reject(mapCognitoError(error))
+        // confirmRegistration does NOT establish a session — the caller signs in next.
+        resolve()
+      })
+    })
+  },
+
+  resendConfirmationCode(email) {
+    const user = new CognitoUser({ Username: email, Pool: pool() })
+    return new Promise((resolve, reject) => {
+      user.resendConfirmationCode((error) => {
         if (error) return reject(mapCognitoError(error))
         resolve()
       })

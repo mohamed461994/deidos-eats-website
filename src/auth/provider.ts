@@ -11,6 +11,8 @@ export interface AuthProvider {
   signIn(email: string, password: string): Promise<void>
   signUp(email: string, password: string, fullName: string): Promise<SignUpResult>
   confirmSignUp(email: string, code: string): Promise<void>
+  /** Re-send the email confirmation code for an unconfirmed account. */
+  resendConfirmationCode(email: string): Promise<void>
   signOut(): Promise<void>
 }
 
@@ -20,6 +22,7 @@ export type AuthFlowErrorCode =
   | 'code_mismatch'
   | 'password_policy'
   | 'not_confirmed'
+  | 'rate_limited'
   | 'unknown'
 
 export class AuthFlowError extends Error {

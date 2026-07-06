@@ -1,7 +1,8 @@
 node_modules
 dist
 *.local
-.env.development
+# .env.development is COMMITTED (public dev identifiers only, live-API mode —
+# see implementation.md §0). Only .env.production stays out of git.
 .env.production
 .DS_Store
 npm-debug.log*

@@ -1,47 +1,70 @@
 /**
- * MOCK persistent state — orders, addresses, profile — kept in localStorage so
- * refreshes behave like a real account. Also runs the "kitchen": placed orders
- * advance through the real lifecycle on timers, emitting the same
- * OrderChangedMessage shapes the WebSocket pushes in live mode.
+ * MOCK persistent state — profiles, addresses, orders — kept in localStorage so
+ * refreshes behave like a real account. Profiles and address books are keyed by
+ * the signed-in email so each account only ever sees its own data (mirroring the
+ * real API, where the user row and addresses belong to the authenticated user).
+ * Also runs the "kitchen": placed orders advance through the real lifecycle on
+ * timers, emitting the same OrderChangedMessage shapes the WebSocket pushes in
+ * live mode.
  */
 import type { Address, Order, OrderChangedMessage, OrderStatus, User } from '@/api/types'
 
-const STORAGE_KEY = 'puca-mock-state-v1'
+// v2: state is now keyed per-account (v1 had a single shared user + address list).
+const STORAGE_KEY = 'puca-mock-state-v2'
+
+/** The persisted stand-in for a user row — created at signup or first /me sync. */
+interface ProfileRecord {
+  id: string
+  fullName: string | null
+  phone: string | null
+  createdAt: string
+  /**
+   * Email-confirmation state, mirroring Cognito: sign-in is refused until the
+   * account is confirmed. Absent on records created before this field existed —
+   * treated as confirmed so nobody is locked out of an account they were using.
+   */
+  confirmed?: boolean
+}
+
+export type ProfileStatus = 'none' | 'unconfirmed' | 'confirmed'
 
 interface MockState {
-  user: User | null
-  addresses: Address[]
+  /** email → profile. */
+  profiles: Record<string, ProfileRecord>
+  /** email → that account's saved addresses (empty for a brand-new account). */
+  addresses: Record<string, Address[]>
+  /** Orders stay a flat list (out of scope; see AGENT_PLAN). */
   orders: Order[]
 }
 
 type Listener = (message: OrderChangedMessage) => void
 
+/** Emails are case-insensitive in Cognito — normalise so keys match regardless of casing. */
+function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase()
+}
+
 function load(): MockState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) return JSON.parse(raw) as MockState
+    if (raw) {
+      const parsed = JSON.parse(raw) as Partial<MockState>
+      return {
+        profiles: parsed.profiles ?? {},
+        addresses: parsed.addresses ?? {},
+        orders: parsed.orders ?? [],
+      }
+    }
   } catch {
     // corrupted state — start fresh
   }
-  return {
-    user: null,
-    addresses: [
-      {
-        id: 'addr0000-0000-4000-8000-000000000001',
-        label: 'Home',
-        line1: '12 Charleston Avenue',
-        line2: null,
-        town: 'Ranelagh, Dublin 6',
-        county: 'Dublin',
-        eircode: 'D06 C7W2',
-        isDefault: true,
-      },
-    ],
-    orders: [],
-  }
+  return { profiles: {}, addresses: {}, orders: [] }
 }
 
 const state: MockState = load()
+// The active session's email. Not persisted: the auth provider (SESSION_KEY) is
+// the source of truth and pushes it in via signInAs on restore/sign-in.
+let currentEmail: string | null = null
 const listeners = new Set<Listener>()
 const kitchenTimers = new Map<string, ReturnType<typeof setTimeout>[]>()
 
@@ -49,31 +72,134 @@ function persist() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
 }
 
-export const mockStore = {
-  get user() {
-    return state.user
-  },
-  setUser(user: User | null) {
-    state.user = user
+function toUser(email: string, record: ProfileRecord): User {
+  return {
+    id: record.id,
+    email,
+    fullName: record.fullName,
+    phone: record.phone,
+    role: 'buyer',
+    createdAt: record.createdAt,
+  }
+}
+
+/**
+ * Ensure a profile record exists for an email (the mock's first-login sync).
+ * Sign-in requires a confirmed signup, so in practice the record always exists
+ * by the time this runs — creation here is defensive only.
+ */
+function ensureProfile(email: string): ProfileRecord {
+  const key = normalizeEmail(email)
+  let record = state.profiles[key]
+  if (!record) {
+    record = {
+      id: crypto.randomUUID(),
+      fullName: null,
+      phone: null,
+      createdAt: new Date().toISOString(),
+      confirmed: true,
+    }
+    state.profiles[key] = record
     persist()
+  }
+  return record
+}
+
+export const mockStore = {
+  /**
+   * Reload state from localStorage and drop the session. TESTS ONLY: state is
+   * module-held, so `localStorage.clear()` alone leaves stale records in memory
+   * (a real page load re-runs `load()` and never needs this).
+   */
+  resetForTests() {
+    const fresh = load()
+    state.profiles = fresh.profiles
+    state.addresses = fresh.addresses
+    state.orders = fresh.orders
+    currentEmail = null
   },
 
-  get addresses() {
-    return state.addresses
+  /* ---- session identity ------------------------------------------------- */
+  get currentEmail() {
+    return currentEmail
   },
-  addAddress(address: Address) {
-    if (address.isDefault) state.addresses.forEach((a) => (a.isDefault = false))
-    state.addresses.push(address)
+  /** Bind the active session to an email (called by the mock auth provider). */
+  signInAs(email: string) {
+    currentEmail = email
+  },
+  clearSession() {
+    currentEmail = null
+  },
+
+  /* ---- profile (per-account) -------------------------------------------- */
+  /**
+   * Capture the signup full name against the email so it survives
+   * signup → confirm → sign-in (stands in for the Cognito `name` attribute).
+   * The account starts UNCONFIRMED — sign-in is refused until confirmSignUp.
+   */
+  registerSignup(email: string, fullName: string) {
+    const key = normalizeEmail(email)
+    const existing = state.profiles[key]
+    state.profiles[key] = {
+      id: existing?.id ?? crypto.randomUUID(),
+      fullName: fullName.trim() || null,
+      phone: existing?.phone ?? null,
+      createdAt: existing?.createdAt ?? new Date().toISOString(),
+      confirmed: false,
+    }
     persist()
   },
-  removeAddress(addressId: string) {
-    const index = state.addresses.findIndex((a) => a.id === addressId)
+  /** Confirmation state for an email — sign-in must refuse all but 'confirmed'. */
+  profileStatus(email: string): ProfileStatus {
+    const record = state.profiles[normalizeEmail(email)]
+    if (!record) return 'none'
+    // Records predating the `confirmed` field are grandfathered as confirmed.
+    return record.confirmed === false ? 'unconfirmed' : 'confirmed'
+  },
+  /** Mark the account's email as confirmed (the mock's confirmRegistration). */
+  markConfirmed(email: string) {
+    const record = state.profiles[normalizeEmail(email)]
+    if (record) {
+      record.confirmed = true
+      persist()
+    }
+  },
+  /** First-login sync: return the account's user, creating the record if needed. */
+  syncUser(email: string): User {
+    return toUser(email, ensureProfile(email))
+  },
+  /** Persist PATCH /me edits (only provided fields change), returning the user. */
+  updateUser(email: string, patch: { fullName?: string; phone?: string }): User {
+    const record = ensureProfile(email)
+    if (patch.fullName !== undefined) record.fullName = patch.fullName
+    if (patch.phone !== undefined) record.phone = patch.phone
+    persist()
+    return toUser(email, record)
+  },
+
+  /* ---- addresses (per-account) ------------------------------------------ */
+  getAddresses(email: string): Address[] {
+    return state.addresses[normalizeEmail(email)] ?? []
+  },
+  addAddress(email: string, address: Address) {
+    const key = normalizeEmail(email)
+    const list = state.addresses[key] ?? []
+    if (address.isDefault) list.forEach((a) => (a.isDefault = false))
+    list.push(address)
+    state.addresses[key] = list
+    persist()
+  },
+  removeAddress(email: string, addressId: string): boolean {
+    const list = state.addresses[normalizeEmail(email)]
+    if (!list) return false
+    const index = list.findIndex((a) => a.id === addressId)
     if (index === -1) return false
-    state.addresses.splice(index, 1)
+    list.splice(index, 1)
     persist()
     return true
   },
 
+  /* ---- orders ----------------------------------------------------------- */
   get orders() {
     return state.orders
   },
