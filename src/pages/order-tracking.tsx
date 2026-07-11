@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { Check, MapPin } from 'lucide-react'
+import { Check, MapPin, RotateCcw } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { Navigate, useParams } from 'react-router-dom'
+import { Navigate, useNavigate, useParams } from 'react-router-dom'
 
 import { errorMessage } from '@/api'
 import { queryKeys, useBranch, useCancelOrder, useOrder } from '@/api/queries'
@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { mapsUrlFor } from '@/lib/maps'
 import { formatCents } from '@/lib/money'
+import { paths } from '@/lib/routes'
 import { cn } from '@/lib/utils'
 
 const STEP_LABELS: Record<string, { title: string; body: string }> = {
@@ -47,6 +48,7 @@ function paymentLabel(order: Order): string | null {
 
 export function OrderTrackingPage() {
   const { orderId } = useParams<{ orderId: string }>()
+  const navigate = useNavigate()
   const { status: authStatus, getAccessToken } = useAuth()
   const orderQuery = useOrder(orderId)
   const order = orderQuery.data
@@ -100,7 +102,8 @@ export function OrderTrackingPage() {
     <main className="mx-auto max-w-2xl px-4 pb-24 sm:px-6">
       <header className="pt-10 pb-6">
         <p className="text-sm font-[650] text-muted">
-          {order.branchName} · {order.fulfillmentType === 'delivery' ? 'Delivery' : 'Collection'}
+          {order.restaurantName} — {order.branchName} ·{' '}
+          {order.fulfillmentType === 'delivery' ? 'Delivery' : 'Collection'}
         </p>
         <h1 className="display mt-1 text-[clamp(2rem,4.5vw,3rem)]">
           {terminated
@@ -298,6 +301,20 @@ export function OrderTrackingPage() {
         {order.note && (
           <p className="mt-2 text-[15px] text-muted">Note: “{order.note}”</p>
         )}
+      </section>
+
+      {/* Order again — routes to the same restaurant + branch menu. If a basket
+          from another restaurant exists, the cross-restaurant guard fires on the
+          first add (Order attribution carries no line ids to rebuild a cart). */}
+      <section className="mt-8 flex flex-wrap items-center justify-between gap-3 rounded-[16px] border border-border p-5">
+        <p className="text-[15px] text-muted">Fancy it again?</p>
+        <Button
+          variant="outline"
+          onClick={() => navigate(paths.restaurantMenu(order.restaurantSlug, order.branchId))}
+        >
+          <RotateCcw className="size-4" aria-hidden />
+          Order again from {order.restaurantName}
+        </Button>
       </section>
     </main>
   )

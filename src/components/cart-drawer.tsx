@@ -33,7 +33,8 @@ export function CartDrawer() {
       ) : (
         <>
           <p className="px-6 text-[13px] font-[550] text-muted">
-            From {cart.branchName}
+            From {cart.restaurantName}
+            {cart.branchName ? ` · ${cart.branchName}` : ''}
           </p>
           <ul className="flex-1 divide-y divide-border/70 overflow-y-auto px-6 py-3">
             {cart.lines.map((line) => (

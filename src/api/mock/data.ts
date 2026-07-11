@@ -1,22 +1,29 @@
 /**
- * MOCK DATA — placeholder Púca Pizza chain used when VITE_API_MODE=mock.
- * Shapes mirror the contract exactly (see src/api/types.ts) so swapping to the
- * live API changes no component code. Image URLs are Unsplash placeholders,
- * each verified to resolve; the real chain's photos come from the platform's
- * CloudFront bucket via the staff image-upload flow.
+ * MOCK DATA — a small TWO-restaurant marketplace used when VITE_API_MODE=mock
+ * (the vitest harness only; the running site always uses the live API). Shapes
+ * mirror the contract exactly (see src/api/types.ts) so swapping to the live API
+ * changes no component code.
+ *
+ * Restaurant A (Deidos Grill) keeps the original branch ids, menu, and prices so
+ * the existing flow/identity tests stay valid; Restaurant B (Nonna's Table) adds
+ * a second restaurant in a different county for the N=2 marketplace tests. Two
+ * more restaurants (coming-soon, paused) are reachable BY SLUG only — they drive
+ * the unavailable-state tests without changing the two-card discovery list.
  */
-import type { Branch, Menu, Restaurant } from '@/api/types'
+import type { Branch, BranchSummary, Menu, Restaurant } from '@/api/types'
 
 const img = (id: string, w = 1200) =>
   `https://images.unsplash.com/photo-${id}?auto=format&fit=crop&w=${w}&q=80`
 
-export const HERO_IMAGE = img('1574071318508-1cdbab80d002', 1800)
-export const SHARING_IMAGE = img('1600628421055-4d30de868b8f', 1400)
-export const TABLE_IMAGE = img('1548369937-47519962c11a', 1400)
-
+// Restaurant A — retains the original ids so flow.test / identity.test hold.
 export const RESTAURANT_ID = 'a1000000-0000-4000-8000-000000000001'
+export const RESTAURANT_A_ID = RESTAURANT_ID
 export const DUBLIN_BRANCH_ID = 'b1000000-0000-4000-8000-000000000001'
 export const CORK_BRANCH_ID = 'b2000000-0000-4000-8000-000000000002'
+
+// Restaurant B — a second restaurant in a different county (marketplace tests).
+export const RESTAURANT_B_ID = 'a2000000-0000-4000-8000-000000000002'
+export const GALWAY_BRANCH_ID = 'b3000000-0000-4000-8000-000000000003'
 
 const FULL_WEEK_HOURS = [
   { weekday: 0, opensAt: '12:00', closesAt: '22:00' },
@@ -30,10 +37,10 @@ const FULL_WEEK_HOURS = [
 
 export const dublinBranch: Branch = {
   id: DUBLIN_BRANCH_ID,
-  restaurantId: RESTAURANT_ID,
-  name: 'Púca Ranelagh',
+  restaurantId: RESTAURANT_A_ID,
+  name: 'Ranelagh',
   description:
-    'The original oven. Forty-eight-hour dough, San Marzano tomatoes, and a wood fire that never quite goes out.',
+    'The original grill. Charcoal-fired, dry-aged, and a fire that never quite goes out.',
   imageUrl: img('1513104890138-7c749659a591', 1400),
   address: {
     line1: '44 Ranelagh Road',
@@ -62,10 +69,9 @@ export const dublinBranch: Branch = {
 
 export const corkBranch: Branch = {
   id: CORK_BRANCH_ID,
-  restaurantId: RESTAURANT_ID,
-  name: 'Púca Washington Street',
-  description:
-    'Same fire, southern charm. Late Fridays, split lunch shifts, and the best people-watching in Cork.',
+  restaurantId: RESTAURANT_A_ID,
+  name: 'Washington Street',
+  description: 'Same fire, southern charm. Late Fridays and the best people-watching in Cork.',
   imageUrl: img('1590947132387-155cc02f3212', 1400),
   address: {
     line1: '21 Washington Street West',
@@ -91,31 +97,123 @@ export const corkBranch: Branch = {
   pos: {} as Branch['pos'],
   openingHours: [
     ...FULL_WEEK_HOURS.filter((h) => h.weekday !== 4),
-    // Friday split shift — exercises multi-range rendering
     { weekday: 4, opensAt: '12:00', closesAt: '15:00' },
     { weekday: 4, opensAt: '17:00', closesAt: '23:30' },
   ],
 }
 
-export const restaurant: Restaurant = {
-  id: RESTAURANT_ID,
-  name: 'Púca Pizza',
-  description:
-    'Wood-fired pizza from Dublin and Cork. Named after the shape-shifting spirit of Irish folklore — mischief in the dough, fire in the oven.',
-  branches: [dublinBranch, corkBranch].map((b) => ({
-    id: b.id,
-    name: b.name,
-    town: b.address.town,
-    imageUrl: b.imageUrl,
-    isOpen: b.isOpen,
-    fulfillment: b.fulfillment,
-    payment: b.payment,
-  })),
+export const galwayBranch: Branch = {
+  id: GALWAY_BRANCH_ID,
+  restaurantId: RESTAURANT_B_ID,
+  name: 'Quay Street',
+  description: 'A tiny room, a big pot, and Nonna’s ragù on since dawn.',
+  imageUrl: img('1481931098730-318b6f776db0', 1400),
+  address: {
+    line1: '3 Quay Street',
+    line2: null,
+    town: 'Galway',
+    county: 'Galway',
+    eircode: 'H91 XY24',
+    latitude: 53.2707,
+    longitude: -9.0568,
+  },
+  timezone: 'Europe/Dublin',
+  isOpen: true,
+  fulfillment: {
+    collectionEnabled: true,
+    deliveryEnabled: true,
+    deliveryFeeCents: 300,
+    minOrderCents: 1500,
+    deliveryRadiusKm: 4,
+    deliveryBaseRadiusKm: 2,
+    deliveryPerKmCents: 75,
+  },
+  payment: { cashEnabled: true },
+  pos: {} as Branch['pos'],
+  openingHours: FULL_WEEK_HOURS,
 }
+
+function toSummary(branch: Branch): BranchSummary {
+  return {
+    id: branch.id,
+    name: branch.name,
+    town: branch.address.town,
+    imageUrl: branch.imageUrl,
+    isOpen: branch.isOpen,
+    fulfillment: branch.fulfillment,
+    payment: branch.payment,
+  }
+}
+
+export const restaurantA: Restaurant = {
+  id: RESTAURANT_A_ID,
+  slug: 'deidos-grill',
+  name: 'Deidos Grill',
+  description:
+    'Charcoal-fired steaks and burgers from Dublin and Cork. Dry-aged, hand-ground, blistered over open flame.',
+  tagline: 'Charcoal-fired, dry-aged, dangerously good.',
+  logoUrl: null,
+  heroImageUrl: img('1544025162-d76694265947', 1800),
+  heroImageAlt: 'A charred dry-aged steak resting on a wooden board',
+  marketplaceStatus: 'acceptingOrders',
+  branches: [dublinBranch, corkBranch].map(toSummary),
+}
+
+export const restaurantB: Restaurant = {
+  id: RESTAURANT_B_ID,
+  slug: 'nonnas-table',
+  name: "Nonna's Table",
+  description:
+    'Slow Italian cooking from a tiny Galway kitchen. Fresh pasta, all-day ragù, and the best tiramisu on the west coast.',
+  tagline: 'Fresh pasta and all-day ragù from Galway.',
+  logoUrl: null,
+  heroImageUrl: img('1621996346565-e3dbc646d9a9', 1800),
+  heroImageAlt: 'A bowl of hand-rolled pasta with slow-cooked ragù',
+  marketplaceStatus: 'acceptingOrders',
+  branches: [galwayBranch].map(toSummary),
+}
+
+// Reachable by slug only (not in the discovery list) — unavailable-state tests.
+export const restaurantComingSoon: Restaurant = {
+  id: 'a3000000-0000-4000-8000-000000000003',
+  slug: 'sea-salt',
+  name: 'Sea Salt',
+  description: 'Coastal seafood, landing soon.',
+  tagline: 'Coastal seafood, landing soon.',
+  logoUrl: null,
+  heroImageUrl: null,
+  heroImageAlt: null,
+  marketplaceStatus: 'comingSoon',
+  branches: [],
+}
+
+export const restaurantPaused: Restaurant = {
+  id: 'a4000000-0000-4000-8000-000000000004',
+  slug: 'the-dock',
+  name: 'The Dock',
+  description: 'Harbourside plates.',
+  tagline: 'Harbourside plates.',
+  logoUrl: null,
+  heroImageUrl: null,
+  heroImageAlt: null,
+  marketplaceStatus: 'paused',
+  branches: [toSummary({ ...galwayBranch, id: 'b4000000-0000-4000-8000-000000000004', restaurantId: 'a4000000-0000-4000-8000-000000000004', name: 'Harbour Road' })],
+}
+
+/** The discovery feed — exactly the two orderable restaurants (N=2). */
+export const restaurantList: Restaurant[] = [restaurantA, restaurantB]
+
+/** Every restaurant reachable by id / slug (includes the by-slug-only ones). */
+export const allRestaurants: Restaurant[] = [
+  restaurantA,
+  restaurantB,
+  restaurantComingSoon,
+  restaurantPaused,
+]
 
 /* ---- Menu ------------------------------------------------------------- */
 
-const VAT_FOOD = 1350 // hot takeaway food, 13.5%
+const VAT_FOOD = 1350 // hot takeaway food (VAT reclassification is a later step)
 const VAT_DRINKS = 2300 // soft drinks, 23%
 
 const toppings = {
@@ -124,7 +222,7 @@ const toppings = {
   minSelect: 0,
   maxSelect: 3,
   options: [
-    { id: 'mo100000-0000-4000-8000-000000000001', name: 'Extra fior di latte', priceDeltaCents: 150, isAvailable: true },
+    { id: 'mo100000-0000-4000-8000-000000000001', name: 'Extra cheese', priceDeltaCents: 150, isAvailable: true },
     { id: 'mo100000-0000-4000-8000-000000000002', name: 'Nduja', priceDeltaCents: 200, isAvailable: true },
     { id: 'mo100000-0000-4000-8000-000000000003', name: 'Portobello mushrooms', priceDeltaCents: 100, isAvailable: true },
     { id: 'mo100000-0000-4000-8000-000000000004', name: 'Red onion', priceDeltaCents: 75, isAvailable: true },
@@ -150,70 +248,26 @@ function menuFor(branchId: string): Menu {
     categories: [
       {
         id: `c1-${branchId}`,
-        name: 'Wood-fired pizzas',
+        name: 'From the grill',
         sortOrder: 0,
         items: [
           {
-            id: `i-puca-${branchId}`,
-            name: 'The Púca',
+            id: `i-house-${branchId}`,
+            name: 'The House Special',
             description:
-              'Our margherita with the lights turned up — double fior di latte, San Marzano, hand-torn basil, cold-pressed olive oil.',
+              'Dry-aged patty, aged cheddar, house pickles, smoked mayo, in a toasted brioche bun.',
             priceCents: 1450,
             vatRateBasisPoints: VAT_FOOD,
-            imageUrl: img('1574071318508-1cdbab80d002'),
+            imageUrl: img('1568901346375-23c9450c58cd'),
             isAvailable: true,
             allergens: ['gluten', 'milk'],
             modifierGroups: [toppings, dips],
           },
           {
-            id: `i-margherita-${branchId}`,
-            name: 'Margherita',
-            description: 'San Marzano, fior di latte, basil. The one every oven is judged by.',
+            id: `i-classic-${branchId}`,
+            name: 'The Classic',
+            description: 'Single patty, lettuce, tomato, red onion. The one every grill is judged by.',
             priceCents: 1150,
-            vatRateBasisPoints: VAT_FOOD,
-            imageUrl: img('1595854341625-f33ee10dbf94'),
-            isAvailable: true,
-            allergens: ['gluten', 'milk'],
-            modifierGroups: [toppings, dips],
-          },
-          {
-            id: `i-pepperoni-${branchId}`,
-            name: 'Double Pepperoni',
-            description: 'Cup-and-char pepperoni over stretched mozzarella. Ask for hot honey. Trust us.',
-            priceCents: 1450,
-            vatRateBasisPoints: VAT_FOOD,
-            imageUrl: img('1541745537411-b8046dc6d66c'),
-            isAvailable: true,
-            allergens: ['gluten', 'milk'],
-            modifierGroups: [toppings, dips],
-          },
-          {
-            id: `i-verdant-${branchId}`,
-            name: 'The Verdant',
-            description: 'White base, ricotta, wilted greens, lemon zest. Proof green can be greedy.',
-            priceCents: 1350,
-            vatRateBasisPoints: VAT_FOOD,
-            imageUrl: img('1593560708920-61dd98c46a4e'),
-            isAvailable: true,
-            allergens: ['gluten', 'milk'],
-            modifierGroups: [toppings],
-          },
-          {
-            id: `i-funghi-${branchId}`,
-            name: 'Funghi & Thyme',
-            description: 'Roast mushrooms, thyme, cherry tomatoes, aged parmesan.',
-            priceCents: 1350,
-            vatRateBasisPoints: VAT_FOOD,
-            imageUrl: img('1590947132387-155cc02f3212'),
-            isAvailable: true,
-            allergens: ['gluten', 'milk'],
-            modifierGroups: [toppings, dips],
-          },
-          {
-            id: `i-bbq-${branchId}`,
-            name: 'Smoked BBQ Chicken',
-            description: 'Smoked chicken, charred pineapple-free, red onion, coriander, bourbon BBQ swirl.',
-            priceCents: 1550,
             vatRateBasisPoints: VAT_FOOD,
             imageUrl: img('1565299624946-b28f40a0ae38'),
             isAvailable: true,
@@ -221,9 +275,31 @@ function menuFor(branchId: string): Menu {
             modifierGroups: [toppings, dips],
           },
           {
+            id: `i-double-${branchId}`,
+            name: 'Double Stack',
+            description: 'Two patties, double cheese, smoked bacon. Ask for hot honey. Trust us.',
+            priceCents: 1450,
+            vatRateBasisPoints: VAT_FOOD,
+            imageUrl: img('1550547660-d9450f859349'),
+            isAvailable: true,
+            allergens: ['gluten', 'milk'],
+            modifierGroups: [toppings, dips],
+          },
+          {
+            id: `i-buttermilk-${branchId}`,
+            name: 'Buttermilk Chicken',
+            description: 'Buttermilk-brined thigh, slaw, pickles, chipotle mayo.',
+            priceCents: 1350,
+            vatRateBasisPoints: VAT_FOOD,
+            imageUrl: img('1606755962773-d324e0a13086'),
+            isAvailable: true,
+            allergens: ['gluten', 'milk'],
+            modifierGroups: [toppings],
+          },
+          {
             id: `i-garden-${branchId}`,
-            name: 'Garden Party',
-            description: 'Peppers, olives, sweetcorn, courgette — the allotment, blistered.',
+            name: 'Garden Stack',
+            description: 'Charred halloumi, roast pepper, harissa, rocket. The greens, blistered.',
             priceCents: 1250,
             vatRateBasisPoints: VAT_FOOD,
             imageUrl: img('1552539618-7eec9b4d1796'),
@@ -232,12 +308,12 @@ function menuFor(branchId: string): Menu {
             modifierGroups: [toppings, dips],
           },
           {
-            id: `i-diavola-${branchId}`,
-            name: 'Flatbread Diavola',
-            description: 'Thin crackle base, chorizo, black olives, tomatoes, a lot of basil.',
+            id: `i-special-${branchId}`,
+            name: 'Off-menu Smash',
+            description: 'Thin, crisp-edged double smash — Dublin only, while it lasts.',
             priceCents: 1395,
             vatRateBasisPoints: VAT_FOOD,
-            imageUrl: img('1585238342024-78d387f4a707'),
+            imageUrl: img('1586190848861-99aa4a171e90'),
             isAvailable: branchId === DUBLIN_BRANCH_ID,
             allergens: ['gluten', 'milk', 'sulphites'],
             modifierGroups: [dips],
@@ -261,14 +337,14 @@ function menuFor(branchId: string): Menu {
             modifierGroups: [dips],
           },
           {
-            id: `i-doughballs-${branchId}`,
-            name: 'Wood-fired Dough Balls',
-            description: 'Eight of them, garlic butter, charred edges. Gone in ninety seconds.',
+            id: `i-rings-${branchId}`,
+            name: 'Beer-battered Onion Rings',
+            description: 'Six of them, crisp, gone in ninety seconds.',
             priceCents: 495,
             vatRateBasisPoints: VAT_FOOD,
             imageUrl: null,
             isAvailable: true,
-            allergens: ['gluten', 'milk'],
+            allergens: ['gluten'],
             modifierGroups: [dips],
           },
         ],
@@ -279,14 +355,14 @@ function menuFor(branchId: string): Menu {
         sortOrder: 2,
         items: [
           {
-            id: `i-panzanella-${branchId}`,
-            name: 'Panzanella',
-            description: 'Heritage tomatoes, torn mozzarella, basil, sourdough croutons from yesterday’s dough.',
+            id: `i-caesar-${branchId}`,
+            name: 'Grilled Chicken Caesar',
+            description: 'Baby gem, aged parmesan, sourdough croutons, anchovy dressing.',
             priceCents: 950,
             vatRateBasisPoints: VAT_FOOD,
-            imageUrl: img('1592417817098-8fd3d9eb14a5'),
+            imageUrl: img('1550304943-4f24f54ddde9'),
             isAvailable: true,
-            allergens: ['gluten', 'milk'],
+            allergens: ['gluten', 'milk', 'fish'],
           },
         ],
       },
@@ -296,19 +372,9 @@ function menuFor(branchId: string): Menu {
         sortOrder: 3,
         items: [
           {
-            id: `i-tiramisu-${branchId}`,
-            name: 'Tiramisu',
-            description: 'Made each morning, dusted to order.',
-            priceCents: 650,
-            vatRateBasisPoints: VAT_FOOD,
-            imageUrl: img('1571877227200-a0d98ea607e9'),
-            isAvailable: true,
-            allergens: ['gluten', 'milk', 'eggs'],
-          },
-          {
             id: `i-brownie-${branchId}`,
-            name: 'Oven-corner Brownie',
-            description: 'Baked in the cool corner of the pizza oven. Vanilla ice cream, caramel.',
+            name: 'Salted Caramel Brownie',
+            description: 'Warm, fudgy, vanilla ice cream, salted caramel.',
             priceCents: 595,
             vatRateBasisPoints: VAT_FOOD,
             imageUrl: img('1551024506-0bccd828d307'),
@@ -333,16 +399,6 @@ function menuFor(branchId: string): Menu {
             allergens: [],
           },
           {
-            id: `i-elderflower-${branchId}`,
-            name: 'Sparkling Elderflower',
-            description: 'Irish elderflower, lightly sparkling.',
-            priceCents: 340,
-            vatRateBasisPoints: VAT_DRINKS,
-            imageUrl: null,
-            isAvailable: true,
-            allergens: [],
-          },
-          {
             id: `i-water-${branchId}`,
             name: 'Still Water',
             description: '500ml, chilled.',
@@ -361,9 +417,18 @@ function menuFor(branchId: string): Menu {
 export const menus: Record<string, Menu> = {
   [DUBLIN_BRANCH_ID]: menuFor(DUBLIN_BRANCH_ID),
   [CORK_BRANCH_ID]: menuFor(CORK_BRANCH_ID),
+  [GALWAY_BRANCH_ID]: menuFor(GALWAY_BRANCH_ID),
 }
 
 export const branches: Record<string, Branch> = {
   [DUBLIN_BRANCH_ID]: dublinBranch,
   [CORK_BRANCH_ID]: corkBranch,
+  [GALWAY_BRANCH_ID]: galwayBranch,
+}
+
+/** Which restaurant a branch belongs to — for order snapshots at checkout. */
+export function restaurantForBranch(branchId: string): Restaurant | undefined {
+  const branch = branches[branchId]
+  if (!branch) return undefined
+  return allRestaurants.find((r) => r.id === branch.restaurantId)
 }

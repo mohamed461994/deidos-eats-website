@@ -95,10 +95,11 @@ function OrderLinks({ orders }: { orders: NonNullable<ReturnType<typeof useMyOrd
             >
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <p className="font-[650]">{order.branchName}</p>
+                  <p className="font-[650]">{order.restaurantName}</p>
                   <Badge variant={badge.variant}>{badge.label}</Badge>
                 </div>
                 <p className="mt-1 text-[13px] text-muted">
+                  {order.branchName} ·{' '}
                   {placedAt.toLocaleDateString('en-IE', { day: 'numeric', month: 'short' })} ·{' '}
                   {placedAt.toLocaleTimeString('en-IE', { hour: '2-digit', minute: '2-digit' })} ·{' '}
                   {order.fulfillmentType === 'delivery' ? 'Delivery' : 'Collection'}

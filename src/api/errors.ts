@@ -20,6 +20,20 @@ export function isApiError(error: unknown, code?: string): error is ApiError {
   return code === undefined || error.code === code
 }
 
+/**
+ * The restaurant stopped accepting orders between browse and checkout — the
+ * server rejects cart-validate/checkout with `cart_invalid` +
+ * `details.reason === 'restaurant_unavailable'` (deidos-eats-api). Distinct from
+ * a per-item/branch validation failure, so the UI can explain it specifically.
+ */
+export function isRestaurantUnavailableError(error: unknown): boolean {
+  return (
+    error instanceof ApiError &&
+    error.code === 'cart_invalid' &&
+    (error.details as { reason?: unknown } | undefined)?.reason === 'restaurant_unavailable'
+  )
+}
+
 /** Buyer-facing copy for known failure codes; falls back to a safe generic line. */
 export function errorMessage(error: unknown): string {
   if (error instanceof ApiError) {

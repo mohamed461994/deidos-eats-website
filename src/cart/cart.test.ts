@@ -38,11 +38,15 @@ const pizza: MenuItem = {
 const nduja = pizza.modifierGroups![0].options[0]
 const onion = pizza.modifierGroups![0].options[1]
 
+const restaurantA = { id: 'rest-1', name: 'Deidos Grill', slug: 'deidos-grill' }
+const restaurantB = { id: 'rest-2', name: "Nonna's Table", slug: 'nonnas-table' }
+
 function add(state: CartState, item: MenuItem, options = [] as typeof pizza.modifierGroups extends undefined ? never[] : (typeof nduja)[], quantity = 1) {
   return cartReducer(state, {
     type: 'add',
+    restaurant: restaurantA,
     branchId: 'branch-1',
-    branchName: 'Púca Ranelagh',
+    branchName: 'Ranelagh',
     line: buildLine(item, options, quantity),
   })
 }
@@ -75,13 +79,31 @@ describe('cartReducer', () => {
     const state = add(emptyCart, pizza)
     const next = cartReducer(state, {
       type: 'add',
+      restaurant: restaurantA,
       branchId: 'branch-2',
-      branchName: 'Púca Washington Street',
+      branchName: 'Washington Street',
       line: buildLine(pizza, [], 1),
     })
     expect(next.branchId).toBe('branch-2')
     expect(next.lines).toHaveLength(1)
     expect(next.lines[0].quantity).toBe(1)
+  })
+
+  it('carries restaurant identity onto the cart and swaps it on a cross-restaurant add', () => {
+    const a = add(emptyCart, pizza)
+    expect(a.restaurantId).toBe('rest-1')
+    expect(a.restaurantName).toBe('Deidos Grill')
+    expect(a.restaurantSlug).toBe('deidos-grill')
+    const b = cartReducer(a, {
+      type: 'add',
+      restaurant: restaurantB,
+      branchId: 'branch-9',
+      branchName: 'Quay Street',
+      line: buildLine(pizza, [], 1),
+    })
+    expect(b.restaurantId).toBe('rest-2')
+    expect(b.restaurantName).toBe("Nonna's Table")
+    expect(b.lines).toHaveLength(1)
   })
 
   it('removes a line at quantity zero and resets branch when empty', () => {

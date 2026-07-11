@@ -27,7 +27,7 @@ export function SignInPage() {
   const { signIn } = useAuth()
   const navigate = useNavigate()
   const [params] = useSearchParams()
-  const next = params.get('next') ?? '/menu'
+  const next = params.get('next') ?? '/'
   const justConfirmed = params.get('confirmed') === '1'
 
   const [email, setEmail] = useState('')
@@ -103,7 +103,7 @@ export function SignUpPage() {
   const { signIn, signUp, confirmSignUp, resendConfirmationCode } = useAuth()
   const navigate = useNavigate()
   const [params] = useSearchParams()
-  const next = params.get('next') ?? '/menu'
+  const next = params.get('next') ?? '/'
   const confirmEmailParam = params.get('confirm')
 
   const [step, setStep] = useState<'details' | 'confirm'>(confirmEmailParam ? 'confirm' : 'details')

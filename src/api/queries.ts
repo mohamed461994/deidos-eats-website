@@ -7,13 +7,27 @@ import {
 } from '@tanstack/react-query'
 
 import { useAuth } from '@/auth/context'
-import { config } from '@/config'
 
+import { isApiError } from './errors'
 import { api } from './index'
-import type { Branch, Order, Restaurant } from './types'
+import type { Branch, Order, Restaurant, RestaurantList } from './types'
+
+/**
+ * A 404 for a slug/id is definitive (unknown or non-published restaurant) — never
+ * retry it, so the soft-404 UI shows immediately instead of hanging on a skeleton
+ * through the retry backoff. Transient errors still get one retry.
+ */
+function retryExceptNotFound(failureCount: number, error: Error): boolean {
+  if (isApiError(error) && error.status === 404) return false
+  return failureCount < 1
+}
 
 export const queryKeys = {
-  restaurant: ['restaurant'] as const,
+  restaurants: ['restaurants'] as const,
+  /** The id-keyed source of truth for a single restaurant (plan §6.2.1). */
+  restaurant: (id: string) => ['restaurant', id] as const,
+  /** Slug → restaurant resolution for `/r/:slug`; seeds `['restaurant', id]`. */
+  restaurantBySlug: (slug: string) => ['restaurant-by-slug', slug] as const,
   branch: (id: string) => ['branch', id] as const,
   menu: (id: string) => ['menu', id] as const,
   orders: ['orders'] as const,
@@ -22,19 +36,47 @@ export const queryKeys = {
   addresses: ['addresses'] as const,
 }
 
-/** The single chain this site belongs to (first restaurant, or the pinned id). */
-export function useRestaurant(): UseQueryResult<Restaurant> {
+/** Every restaurant on the marketplace — the discovery feed. */
+export function useRestaurants(): UseQueryResult<RestaurantList> {
   return useQuery({
-    queryKey: queryKeys.restaurant,
+    queryKey: queryKeys.restaurants,
+    queryFn: () => api.listRestaurants(),
+    staleTime: 5 * 60_000,
+  })
+}
+
+/**
+ * Resolve a restaurant from the slug in the URL (`/r/:slug`). On success it also
+ * seeds the id-keyed cache (`['restaurant', id]`) so id-based consumers — the
+ * cart's restaurant at checkout, "order again" — hit cache instead of refetching.
+ * A 404 (unknown or non-published slug) surfaces as the query error → soft-404 UI.
+ */
+export function useRestaurantBySlug(slug: string | undefined): UseQueryResult<Restaurant> {
+  const queryClient = useQueryClient()
+  return useQuery({
+    queryKey: queryKeys.restaurantBySlug(slug ?? 'none'),
     queryFn: async () => {
-      const list = await api.listRestaurants()
-      const pinned = config.restaurantId
-        ? list.items.find((r) => r.id === config.restaurantId)
-        : undefined
-      const restaurant = pinned ?? list.items[0]
-      if (!restaurant) throw new Error('No restaurant configured')
+      const restaurant = await api.getRestaurantBySlug(slug!)
+      queryClient.setQueryData(queryKeys.restaurant(restaurant.id), restaurant)
       return restaurant
     },
+    enabled: !!slug,
+    retry: retryExceptNotFound,
+    staleTime: 5 * 60_000,
+  })
+}
+
+/**
+ * A restaurant by its stable id (`['restaurant', id]`). Used on global routes
+ * that must derive identity from the cart/order, never "the last restaurant
+ * browsed" (plan §6.2.8) — e.g. checkout resolving `cart.restaurantId`.
+ */
+export function useRestaurant(restaurantId: string | null | undefined): UseQueryResult<Restaurant> {
+  return useQuery({
+    queryKey: queryKeys.restaurant(restaurantId ?? 'none'),
+    queryFn: () => api.getRestaurant(restaurantId!),
+    enabled: !!restaurantId,
+    retry: retryExceptNotFound,
     staleTime: 5 * 60_000,
   })
 }

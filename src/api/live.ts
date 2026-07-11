@@ -16,6 +16,7 @@ import type {
   Order,
   OrderList,
   PricedCart,
+  Restaurant,
   RestaurantList,
   User,
   UserUpdate,
@@ -24,6 +25,19 @@ import { apiRequest } from './http'
 
 export async function listRestaurants(): Promise<RestaurantList> {
   return apiRequest('/restaurants?limit=50', { auth: false })
+}
+
+/** A single restaurant by its stable id — the id-keyed source of truth. */
+export async function getRestaurant(restaurantId: string): Promise<Restaurant> {
+  return apiRequest(`/restaurants/${restaurantId}`, { auth: false })
+}
+
+/**
+ * A single restaurant by its canonical (lowercase) slug — how `/r/:slug` routes
+ * resolve. Exact match; 404 for an unknown or non-published slug (soft-404 UI).
+ */
+export async function getRestaurantBySlug(slug: string): Promise<Restaurant> {
+  return apiRequest(`/restaurants/by-slug/${encodeURIComponent(slug)}`, { auth: false })
 }
 
 export async function getBranch(branchId: string): Promise<Branch> {

@@ -18,13 +18,14 @@ import type {
   OrderList,
   PricedCart,
   PricedCartLine,
+  Restaurant,
   RestaurantList,
   User,
   UserUpdate,
 } from '@/api/types'
 
 import { ApiError } from '../errors'
-import { branches, menus, restaurant } from './data'
+import { allRestaurants, branches, menus, restaurantForBranch, restaurantList } from './data'
 import { mockStore } from './store'
 
 const LATENCY_MS = 350
@@ -133,7 +134,21 @@ function priceCart(branch: Branch, request: CartValidateRequest): PricedCart {
 
 export async function listRestaurants(): Promise<RestaurantList> {
   await delay()
-  return { items: [restaurant], pageInfo: { nextCursor: null } }
+  return { items: restaurantList, pageInfo: { nextCursor: null } }
+}
+
+export async function getRestaurant(restaurantId: string): Promise<Restaurant> {
+  await delay()
+  const restaurant = allRestaurants.find((r) => r.id === restaurantId)
+  if (!restaurant) fail(404, 'not_found', 'Restaurant not found.')
+  return restaurant
+}
+
+export async function getRestaurantBySlug(slug: string): Promise<Restaurant> {
+  await delay()
+  const restaurant = allRestaurants.find((r) => r.slug === slug.toLowerCase())
+  if (!restaurant) fail(404, 'not_found', 'Restaurant not found.')
+  return restaurant
 }
 
 export async function getBranch(branchId: string): Promise<Branch> {
@@ -202,10 +217,16 @@ export async function checkout(
     lines: request.lines,
   })
 
+  // Snapshot the restaurant onto the order at checkout (renames never rewrite
+  // history) — mirrors the API's shared orders mapper.
+  const restaurant = restaurantForBranch(branch.id)
   const now = new Date().toISOString()
   const orderId = crypto.randomUUID()
   const order: Order = {
     id: orderId,
+    restaurantId: restaurant?.id ?? branch.restaurantId,
+    restaurantName: restaurant?.name ?? 'Restaurant',
+    restaurantSlug: restaurant?.slug ?? 'restaurant',
     branchId: branch.id,
     branchName: branch.name,
     status: 'placed',
@@ -280,6 +301,10 @@ export async function listMyOrders(cursor?: string): Promise<OrderList> {
   return {
     items: slice.map((o) => ({
       id: o.id,
+      restaurantId: o.restaurantId,
+      restaurantName: o.restaurantName,
+      restaurantSlug: o.restaurantSlug,
+      branchId: o.branchId,
       branchName: o.branchName,
       status: o.status,
       fulfillmentType: o.fulfillmentType,

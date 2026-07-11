@@ -10,6 +10,8 @@ import * as mock from './mock/api'
 
 export const api = {
   listRestaurants: isMock ? mock.listRestaurants : live.listRestaurants,
+  getRestaurant: isMock ? mock.getRestaurant : live.getRestaurant,
+  getRestaurantBySlug: isMock ? mock.getRestaurantBySlug : live.getRestaurantBySlug,
   getBranch: isMock ? mock.getBranch : live.getBranch,
   getBranchMenu: isMock ? mock.getBranchMenu : live.getBranchMenu,
   validateCart: isMock ? mock.validateCart : live.validateCart,
@@ -24,4 +26,4 @@ export const api = {
   deleteMyAddress: isMock ? mock.deleteMyAddress : live.deleteMyAddress,
 }
 
-export { ApiError, errorMessage, isApiError } from './errors'
+export { ApiError, errorMessage, isApiError, isRestaurantUnavailableError } from './errors'

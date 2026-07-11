@@ -22,13 +22,37 @@ export interface CartLine {
   modifiers: CartModifier[]
 }
 
+/**
+ * A cart belongs to exactly one restaurant and one branch (one checkout = one
+ * branch = one order, enforced by the platform). Restaurant identity travels
+ * with the cart so global routes (checkout, cart bar) name it without re-deriving
+ * from "the last restaurant browsed". `restaurantSlug` is display/navigation
+ * cache — the authoritative link is the stable `restaurantId` (plan §6.2.5).
+ */
 export interface CartState {
+  restaurantId: string | null
+  restaurantName: string | null
+  restaurantSlug: string | null
   branchId: string | null
   branchName: string | null
   lines: CartLine[]
 }
 
-export const emptyCart: CartState = { branchId: null, branchName: null, lines: [] }
+export const emptyCart: CartState = {
+  restaurantId: null,
+  restaurantName: null,
+  restaurantSlug: null,
+  branchId: null,
+  branchName: null,
+  lines: [],
+}
+
+/** The restaurant a line is being added for (thread through from the menu route). */
+export interface CartRestaurant {
+  id: string
+  name: string
+  slug: string
+}
 
 export function lineKey(menuItemId: string, optionIds: string[]): string {
   return [menuItemId, ...[...optionIds].sort()].join('|')
@@ -56,15 +80,23 @@ export function buildLine(
 }
 
 export type CartAction =
-  | { type: 'add'; branchId: string; branchName: string; line: CartLine }
+  | {
+      type: 'add'
+      restaurant: CartRestaurant
+      branchId: string
+      branchName: string
+      line: CartLine
+    }
   | { type: 'setQuantity'; key: string; quantity: number }
   | { type: 'remove'; key: string }
+  | { type: 'load'; cart: CartState }
   | { type: 'clear' }
 
 export function cartReducer(state: CartState, action: CartAction): CartState {
   switch (action.type) {
     case 'add': {
-      // Adding from a different branch replaces the cart — caller confirms first.
+      // Adding from a different branch (any restaurant) replaces the cart — the
+      // caller confirms first (one cart = one restaurant = one branch).
       const sameBranch = state.branchId === action.branchId
       const lines = sameBranch ? state.lines : []
       const existing = lines.find((l) => l.key === action.line.key)
@@ -75,8 +107,18 @@ export function cartReducer(state: CartState, action: CartAction): CartState {
               : l,
           )
         : [...lines, action.line]
-      return { branchId: action.branchId, branchName: action.branchName, lines: nextLines }
+      return {
+        restaurantId: action.restaurant.id,
+        restaurantName: action.restaurant.name,
+        restaurantSlug: action.restaurant.slug,
+        branchId: action.branchId,
+        branchName: action.branchName,
+        lines: nextLines,
+      }
     }
+    // Replace the whole cart from restored/validated storage (migration result).
+    case 'load':
+      return action.cart
     case 'setQuantity': {
       if (action.quantity <= 0) {
         return cartReducer(state, { type: 'remove', key: action.key })

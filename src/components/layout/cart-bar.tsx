@@ -8,7 +8,7 @@ import { formatCents } from '@/lib/money'
  * Hidden on checkout/tracking (the flow owns the bottom of the screen there).
  */
 export function MobileCartBar() {
-  const { itemCount, subtotalCents, openCart } = useCart()
+  const { cart, itemCount, subtotalCents, openCart } = useCart()
   const { pathname } = useLocation()
 
   const hidden =
@@ -28,9 +28,11 @@ export function MobileCartBar() {
         onClick={openCart}
         className="flex h-14 w-full items-center justify-between rounded-full bg-basil px-6 text-on-basil shadow-floating transition-colors active:bg-basil-deep"
       >
-        <span className="flex items-center gap-2 font-[650]">
-          <span aria-hidden className="ember-dot" />
-          View cart
+        <span className="flex min-w-0 items-center gap-2 font-[650]">
+          <span aria-hidden className="ember-dot shrink-0" />
+          <span className="truncate">
+            {cart.restaurantName ? `${cart.restaurantName} basket` : 'View basket'}
+          </span>
         </span>
         <span className="tabular-nums font-[650]">
           {itemCount} · {formatCents(subtotalCents)}

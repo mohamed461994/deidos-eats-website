@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 
 import type { MenuItem, ModifierGroup, ModifierOption } from '@/api/types'
+import type { CartRestaurant } from '@/cart/cart'
 import { useCart } from '@/cart/context'
 import { FoodImage } from '@/components/food-image'
 import { Badge } from '@/components/ui/badge'
@@ -30,13 +31,15 @@ const ALLERGEN_LABELS: Record<string, string> = {
 
 interface ItemDialogProps {
   item: MenuItem | null
+  /** The restaurant this menu belongs to — travels onto the cart. */
+  restaurant: CartRestaurant
   branchId: string
   branchName: string
   onClose: () => void
 }
 
-export function ItemDialog({ item, branchId, branchName, onClose }: ItemDialogProps) {
-  const { addItem, openCart } = useCart()
+export function ItemDialog({ item, restaurant, branchId, branchName, onClose }: ItemDialogProps) {
+  const { addItem, openCart, cart, itemCount: cartCount } = useCart()
   const { toast } = useToast()
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [quantity, setQuantity] = useState(1)
@@ -82,7 +85,15 @@ export function ItemDialog({ item, branchId, branchName, onClose }: ItemDialogPr
       setGroupErrors(new Set(missing.map((g) => g.id)))
       return
     }
-    const result = addItem({ branchId, branchName, item, options: selectedOptions, quantity, force })
+    const result = addItem({
+      restaurant,
+      branchId,
+      branchName,
+      item,
+      options: selectedOptions,
+      quantity,
+      force,
+    })
     if (result.outcome === 'conflict') {
       setConflict(true)
       return
@@ -198,15 +209,27 @@ export function ItemDialog({ item, branchId, branchName, onClose }: ItemDialogPr
         {conflict ? (
           <div className="flex flex-col gap-3">
             <p className="text-[15px]">
-              Your cart has items from another branch. Start a new cart from{' '}
-              <strong>{branchName}</strong>?
+              Your basket has {cartCount} item{cartCount === 1 ? '' : 's'} from{' '}
+              <strong>
+                {cart.restaurantName}
+                {cart.branchName ? `, ${cart.branchName}` : ''}
+              </strong>
+              .{' '}
+              {cart.restaurantId === restaurant.id
+                ? `Switching to ${branchName} clears it — a basket is one branch only.`
+                : `Starting a basket with ${restaurant.name} clears it — a basket is one restaurant only.`}
             </p>
             <div className="flex gap-2">
-              <Button variant="outline" className="flex-1" onClick={() => setConflict(false)}>
-                Keep my cart
+              <Button
+                autoFocus
+                variant="outline"
+                className="flex-1"
+                onClick={() => setConflict(false)}
+              >
+                Keep {cart.restaurantName ?? 'my'} basket
               </Button>
               <Button className="flex-1" onClick={() => handleAdd(true)}>
-                Start new cart
+                Clear &amp; start with {cart.restaurantId === restaurant.id ? branchName : restaurant.name}
               </Button>
             </div>
           </div>

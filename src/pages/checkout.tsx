@@ -2,7 +2,7 @@ import { Bike, Clock, MapPin, ShoppingBag } from 'lucide-react'
 import { lazy, Suspense, useRef, useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 
-import { api, errorMessage } from '@/api'
+import { api, errorMessage, isRestaurantUnavailableError } from '@/api'
 import { mockConfirmCardPayment, mockStartKitchenForCashOrder } from '@/api/mock/api'
 import { useAddresses, useBranch, useBranchesDetails, useRestaurant } from '@/api/queries'
 import type { Branch, CheckoutResponse, FulfillmentType, PricedCart } from '@/api/types'
@@ -17,11 +17,12 @@ import { Button } from '@/components/ui/button'
 import { TextAreaField } from '@/components/ui/field'
 import { Skeleton } from '@/components/ui/skeleton'
 import { isMock } from '@/config'
-import { useSelectedBranch } from '@/lib/branch-selection'
+import { useRememberedBranch } from '@/lib/branch-selection'
 import { sameCounty } from '@/lib/distance'
 import { newIdempotencyKey } from '@/lib/idempotency'
 import { mapsUrlFor } from '@/lib/maps'
 import { formatCents, formatVatRate } from '@/lib/money'
+import { paths } from '@/lib/routes'
 import { cn } from '@/lib/utils'
 
 const StripePayment = lazy(() =>
@@ -37,8 +38,13 @@ export function CheckoutPage() {
   const branchQuery = useBranch(cart.branchId)
   const branch = branchQuery.data
   const addressesQuery = useAddresses()
-  const restaurantQuery = useRestaurant()
-  const [, selectBranch] = useSelectedBranch()
+  // Identity is the CART's restaurant — never "the last restaurant browsed".
+  // This is the N=2 fix: the county-mismatch suggestion and the branch picker
+  // below must iterate THIS restaurant's branches, not a globally-pinned one.
+  const restaurantQuery = useRestaurant(cart.restaurantId)
+  const restaurantSlug = restaurantQuery.data?.slug ?? cart.restaurantSlug
+  const [, rememberBranch] = useRememberedBranch(cart.restaurantId)
+  const [unavailable, setUnavailable] = useState(false)
 
   // User choices layered over sensible defaults — derived, never synced via effects
   const [fulfillmentChoice, setFulfillmentChoice] = useState<FulfillmentType | null>(null)
@@ -96,16 +102,58 @@ export function CheckoutPage() {
     )
   }
   if (status === 'signedOut') {
-    return <Navigate to="/signin?next=/checkout" replace />
+    return <Navigate to={paths.signIn(paths.checkout())} replace />
   }
   if (itemCount === 0 && !placed) {
     return (
       <main className="mx-auto max-w-2xl px-4 py-10 sm:px-6">
         <EmptyState
           title="Nothing to check out"
-          body="Your cart is empty — the ovens are ready when you are."
+          body="Your basket is empty — pick a restaurant and we'll get the ovens going."
+          action={<Button onClick={() => navigate(paths.discovery())}>Browse restaurants</Button>}
+        />
+      </main>
+    )
+  }
+  // The restaurant stopped taking orders mid-checkout (server-authoritative).
+  if (unavailable) {
+    return (
+      <main className="mx-auto max-w-2xl px-4 py-10 sm:px-6">
+        <EmptyState
+          title={`${cart.restaurantName ?? 'This restaurant'} isn't taking orders`}
+          body="They paused new orders while you were checking out. Your basket is saved — try again shortly, or browse other restaurants."
           action={
-            <Button onClick={() => navigate('/menu')}>Browse the menu</Button>
+            <div className="flex flex-wrap justify-center gap-2">
+              {restaurantSlug && (
+                <Button variant="outline" onClick={() => navigate(paths.restaurant(restaurantSlug))}>
+                  Back to {cart.restaurantName ?? 'restaurant'}
+                </Button>
+              )}
+              <Button onClick={() => navigate(paths.discovery())}>Browse restaurants</Button>
+            </div>
+          }
+        />
+      </main>
+    )
+  }
+  // Untrusted-cache guard (plan §6.2.5): the persisted restaurant id must match
+  // the AUTHORITATIVE branch. A mismatch means stale cart identity — block with a
+  // recovery path rather than checking out against the wrong restaurant.
+  if (branch && cart.restaurantId && branch.restaurantId !== cart.restaurantId) {
+    return (
+      <main className="mx-auto max-w-2xl px-4 py-10 sm:px-6">
+        <EmptyState
+          title="We couldn't confirm your basket"
+          body="Your saved basket doesn't line up with this restaurant anymore. Clear it and start fresh to keep your order accurate."
+          action={
+            <Button
+              onClick={() => {
+                clearCart()
+                navigate(paths.discovery())
+              }}
+            >
+              Clear basket &amp; browse
+            </Button>
           }
         />
       </main>
@@ -131,7 +179,10 @@ export function CheckoutPage() {
       })
       setQuote({ cart: result, signature: quoteSignature })
     } catch (err) {
-      setError(errorMessage(err))
+      // Restaurant went paused/unavailable between browse and here — explain it
+      // specifically rather than as a generic validation error (plan §6.2.9).
+      if (isRestaurantUnavailableError(err)) setUnavailable(true)
+      else setError(errorMessage(err))
     } finally {
       setPricing(false)
     }
@@ -157,10 +208,11 @@ export function CheckoutPage() {
       if (response.paymentMethod === 'cash') {
         if (isMock) mockStartKitchenForCashOrder(response.orderId)
         clearCart()
-        navigate(`/orders/${response.orderId}`, { replace: true })
+        navigate(paths.order(response.orderId), { replace: true })
       }
     } catch (err) {
-      setError(errorMessage(err))
+      if (isRestaurantUnavailableError(err)) setUnavailable(true)
+      else setError(errorMessage(err))
     } finally {
       setPlacing(false)
     }
@@ -172,7 +224,7 @@ export function CheckoutPage() {
     try {
       await mockConfirmCardPayment(placed.orderId)
       clearCart()
-      navigate(`/orders/${placed.orderId}`, { replace: true })
+      navigate(paths.order(placed.orderId), { replace: true })
     } finally {
       setPayingMock(false)
     }
@@ -240,6 +292,9 @@ export function CheckoutPage() {
                   <h2 id="branch-heading" className="text-sm font-[650] text-muted">
                     {fulfillment === 'collection' ? "You'll collect from here" : 'Ordering from'}
                   </h2>
+                  {cart.restaurantName && (
+                    <p className="text-[13px] font-[650] text-basil">{cart.restaurantName}</p>
+                  )}
                   <p className="display text-xl">{branch.name}</p>
                 </div>
                 <span
@@ -558,10 +613,11 @@ export function CheckoutPage() {
         selectedId={cart.branchId}
         mode="moveOrder"
         initialTarget={switchTarget}
+        title={restaurantQuery.data ? `Choose a ${restaurantQuery.data.name} location` : 'Choose a location'}
         onSelected={(b) => {
           // The dialog has already cleared the cart if this was a real switch.
-          selectBranch(b.id)
-          navigate('/menu')
+          rememberBranch(b.id)
+          if (restaurantSlug) navigate(paths.restaurantMenu(restaurantSlug, b.id))
         }}
       />
     </main>

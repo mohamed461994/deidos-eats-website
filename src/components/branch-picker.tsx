@@ -267,7 +267,7 @@ export function BranchPickerDialog({
   mode = 'browse',
   onSelected,
   initialTarget = null,
-  title = 'Which Púca is yours?',
+  title = 'Choose a location',
 }: BranchPickerDialogProps) {
   return (
     <Modal open={open} onOpenChange={onOpenChange} title={title} shape="center">
