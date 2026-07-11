@@ -6,14 +6,20 @@ import { FoodImage } from '@/components/food-image'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { HERO_IMAGE, SHARING_IMAGE } from '@/lib/brand'
-import { useSelectedBranch } from '@/lib/branch-selection'
+import { resolveSelectedBranch, useSelectedBranch } from '@/lib/branch-selection'
 import { formatCents } from '@/lib/money'
 
 export function HomePage() {
   const navigate = useNavigate()
   const { data: restaurant } = useRestaurant()
   const [selectedBranchId, selectBranch] = useSelectedBranch()
-  const branchId = selectedBranchId ?? restaurant?.branches[0]?.id ?? null
+  // Display-only: pull highlight imagery from the chosen branch, or the first
+  // branch as a fallback for the photos. This NEVER writes a selection — the
+  // menu gate is the only place a branch gets chosen.
+  const branchId =
+    resolveSelectedBranch(restaurant?.branches, selectedBranchId) ??
+    restaurant?.branches[0]?.id ??
+    null
   const { data: menu } = useMenu(branchId)
 
   const highlights =

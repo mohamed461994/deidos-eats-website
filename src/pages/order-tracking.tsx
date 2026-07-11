@@ -1,10 +1,10 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { Check } from 'lucide-react'
+import { Check, MapPin } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Navigate, useParams } from 'react-router-dom'
 
 import { errorMessage } from '@/api'
-import { queryKeys, useCancelOrder, useOrder } from '@/api/queries'
+import { queryKeys, useBranch, useCancelOrder, useOrder } from '@/api/queries'
 import type { Order, OrderStatus } from '@/api/types'
 import { connectOrderEvents } from '@/api/ws'
 import { useAuth } from '@/auth/context'
@@ -12,6 +12,7 @@ import { ErrorState } from '@/components/states'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { mapsUrlFor } from '@/lib/maps'
 import { formatCents } from '@/lib/money'
 import { cn } from '@/lib/utils'
 
@@ -49,6 +50,9 @@ export function OrderTrackingPage() {
   const { status: authStatus, getAccessToken } = useAuth()
   const orderQuery = useOrder(orderId)
   const order = orderQuery.data
+  // Collection orders show where to pick up — only fetch the branch for those.
+  const collectionBranchId = order?.fulfillmentType === 'collection' ? order.branchId : null
+  const collectionBranchQuery = useBranch(collectionBranchId)
   const cancelMutation = useCancelOrder(orderId ?? '')
   const queryClient = useQueryClient()
   const [confirmingCancel, setConfirmingCancel] = useState(false)
@@ -175,6 +179,28 @@ export function OrderTrackingPage() {
           </ol>
         )}
       </section>
+
+      {/* Where to collect — pickup address + maps link for collection orders */}
+      {order.fulfillmentType === 'collection' && collectionBranchQuery.data && (
+        <section aria-labelledby="collect-heading" className="mt-8 rounded-[16px] border border-border p-5">
+          <h2 id="collect-heading" className="text-sm font-[650] text-muted">
+            Collect from
+          </h2>
+          <p className="mt-1 font-[650]">{collectionBranchQuery.data.name}</p>
+          <a
+            href={mapsUrlFor(collectionBranchQuery.data.name, collectionBranchQuery.data.address)}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-1 flex items-start gap-2 text-[15px] text-muted underline-offset-4 hover:underline"
+          >
+            <MapPin className="mt-0.5 size-4 shrink-0 text-basil" aria-hidden />
+            <span>
+              {collectionBranchQuery.data.address.line1}, {collectionBranchQuery.data.address.town},{' '}
+              {collectionBranchQuery.data.address.eircode}
+            </span>
+          </a>
+        </section>
+      )}
 
       {/* Cancel — only while `placed`, matching the platform rule */}
       {order.status === 'placed' && (

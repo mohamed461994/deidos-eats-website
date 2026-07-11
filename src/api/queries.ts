@@ -1,5 +1,6 @@
 import {
   useMutation,
+  useQueries,
   useQuery,
   useQueryClient,
   type UseQueryResult,
@@ -9,7 +10,7 @@ import { useAuth } from '@/auth/context'
 import { config } from '@/config'
 
 import { api } from './index'
-import type { Order, Restaurant } from './types'
+import type { Branch, Order, Restaurant } from './types'
 
 export const queryKeys = {
   restaurant: ['restaurant'] as const,
@@ -44,6 +45,22 @@ export function useBranch(branchId: string | null) {
     queryFn: () => api.getBranch(branchId!),
     enabled: branchId !== null,
     staleTime: 60_000,
+  })
+}
+
+/**
+ * Fetch several branches' full details at once (name, address, hours, coords).
+ * Shares the exact per-branch cache key with `useBranch`, so a branch already
+ * loaded elsewhere is served from cache. Pass `[]` to fetch nothing — used by
+ * the branch picker (distance sort) and checkout (county-match suggestion).
+ */
+export function useBranchesDetails(branchIds: string[]): UseQueryResult<Branch>[] {
+  return useQueries({
+    queries: branchIds.map((id) => ({
+      queryKey: queryKeys.branch(id),
+      queryFn: () => api.getBranch(id),
+      staleTime: 60_000,
+    })),
   })
 }
 

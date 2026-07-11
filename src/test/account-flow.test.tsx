@@ -55,6 +55,12 @@ describe('account page after a fresh signup + login', () => {
     // signed-in header shows the first name once /me resolves
     await screen.findByText('Seán', {}, { timeout: 5000 })
 
+    // The confirm → sign-in flow redirects to /menu, and that sign-in awaits a
+    // full query invalidation first (auth/context.tsx). Wait for the redirect to
+    // actually land before navigating on, otherwise it can fire late and bounce
+    // us off /account.
+    await waitFor(() => expect(window.location.pathname).toBe('/menu'), { timeout: 5000 })
+
     // --- go to the account page (header account link)
     fireEvent.click(screen.getByRole('link', { name: /your account/i }))
 

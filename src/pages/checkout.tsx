@@ -1,21 +1,26 @@
-import { Bike, ShoppingBag } from 'lucide-react'
+import { Bike, Clock, MapPin, ShoppingBag } from 'lucide-react'
 import { lazy, Suspense, useRef, useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 
 import { api, errorMessage } from '@/api'
 import { mockConfirmCardPayment, mockStartKitchenForCashOrder } from '@/api/mock/api'
-import { useAddresses, useBranch } from '@/api/queries'
-import type { CheckoutResponse, FulfillmentType, PricedCart } from '@/api/types'
+import { useAddresses, useBranch, useBranchesDetails, useRestaurant } from '@/api/queries'
+import type { Branch, CheckoutResponse, FulfillmentType, PricedCart } from '@/api/types'
 import { useAuth } from '@/auth/context'
 import { useCart } from '@/cart/context'
 import { AddressForm } from '@/components/address-form'
+import { BranchPickerDialog } from '@/components/branch-picker'
+import { CountyMismatchNotice } from '@/components/county-mismatch-notice'
 import { EmptyState } from '@/components/states'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { TextAreaField } from '@/components/ui/field'
 import { Skeleton } from '@/components/ui/skeleton'
 import { isMock } from '@/config'
+import { useSelectedBranch } from '@/lib/branch-selection'
+import { sameCounty } from '@/lib/distance'
 import { newIdempotencyKey } from '@/lib/idempotency'
+import { mapsUrlFor } from '@/lib/maps'
 import { formatCents, formatVatRate } from '@/lib/money'
 import { cn } from '@/lib/utils'
 
@@ -32,6 +37,8 @@ export function CheckoutPage() {
   const branchQuery = useBranch(cart.branchId)
   const branch = branchQuery.data
   const addressesQuery = useAddresses()
+  const restaurantQuery = useRestaurant()
+  const [, selectBranch] = useSelectedBranch()
 
   // User choices layered over sensible defaults — derived, never synced via effects
   const [fulfillmentChoice, setFulfillmentChoice] = useState<FulfillmentType | null>(null)
@@ -42,6 +49,25 @@ export function CheckoutPage() {
   const [addressChoice, setAddressChoice] = useState<string | null>(null)
   const defaultAddress = addressesQuery.data?.find((a) => a.isDefault) ?? addressesQuery.data?.[0]
   const addressId = addressChoice ?? defaultAddress?.id ?? null
+  const selectedAddress = addressesQuery.data?.find((a) => a.id === addressId)
+  const addressCounty = selectedAddress?.county ?? null
+
+  // Branch switching (move-order): the picker in checkout clears the cart on a
+  // real branch change. `switchTarget` opens it straight on the confirm step so
+  // a county-mismatch suggestion is a genuine one-tap switch.
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const [switchTarget, setSwitchTarget] = useState<Branch | null>(null)
+
+  // Look up the *other* branches only when a delivery county could mismatch, so
+  // we can suggest one that actually sits in the delivery address's county.
+  const otherBranchIds = (restaurantQuery.data?.branches ?? [])
+    .map((b) => b.id)
+    .filter((id) => id !== cart.branchId)
+  const suggestionIds = fulfillment === 'delivery' && addressCounty ? otherBranchIds : []
+  const otherBranches = useBranchesDetails(suggestionIds)
+  const suggestionBranch = otherBranches.find(
+    (q) => q.data && sameCounty(q.data.address.county, addressCounty),
+  )?.data
 
   const [addingAddress, setAddingAddress] = useState(false)
   const [note, setNote] = useState('')
@@ -164,14 +190,6 @@ export function CheckoutPage() {
     <main className="mx-auto max-w-2xl px-4 pb-24 sm:px-6">
       <header className="pt-10 pb-6">
         <h1 className="display text-[clamp(2rem,4.5vw,3rem)]">Checkout</h1>
-        {branch && (
-          <p className="mt-2 text-muted">
-            From <strong className="text-ink">{branch.name}</strong> ·{' '}
-            <Link to="/menu" className="text-basil underline-offset-4 hover:underline">
-              edit your cart
-            </Link>
-          </p>
-        )}
       </header>
 
       {placed && placed.paymentMethod === 'card' ? (
@@ -210,6 +228,67 @@ export function CheckoutPage() {
       ) : (
         /* ---- Build step --------------------------------------------------- */
         <div className="flex flex-col gap-8">
+          {/* Branch — the money-moment guardrail: which branch, full address,
+              and one tap to change it (which clears the cart). */}
+          {branch && (
+            <section
+              aria-labelledby="branch-heading"
+              className="rounded-[16px] border border-border p-5"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex flex-col gap-1">
+                  <h2 id="branch-heading" className="text-sm font-[650] text-muted">
+                    {fulfillment === 'collection' ? "You'll collect from here" : 'Ordering from'}
+                  </h2>
+                  <p className="display text-xl">{branch.name}</p>
+                </div>
+                <span
+                  className={cn(
+                    'flex shrink-0 items-center gap-1.5 text-sm font-[650]',
+                    branch.isOpen ? 'text-basil' : 'text-muted',
+                  )}
+                >
+                  <Clock className="size-4" aria-hidden />
+                  {branch.isOpen ? 'Open now' : 'Closed'}
+                </span>
+              </div>
+              <a
+                href={mapsUrlFor(branch.name, branch.address)}
+                target="_blank"
+                rel="noreferrer"
+                className={cn(
+                  'mt-3 flex items-start gap-2 text-[15px] underline-offset-4 hover:underline',
+                  fulfillment === 'collection' ? 'font-[550] text-ink' : 'text-muted',
+                )}
+              >
+                <MapPin className="mt-0.5 size-4 shrink-0 text-basil" aria-hidden />
+                <span>
+                  {branch.address.line1}
+                  {branch.address.line2 ? `, ${branch.address.line2}` : ''}, {branch.address.town},{' '}
+                  {branch.address.eircode}
+                </span>
+              </a>
+              <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setSwitchTarget(null)
+                    setPickerOpen(true)
+                  }}
+                >
+                  Change branch
+                </Button>
+                <Link
+                  to="/menu"
+                  className="text-[15px] text-basil underline-offset-4 hover:underline"
+                >
+                  Edit your cart
+                </Link>
+              </div>
+            </section>
+          )}
+
           {/* Fulfillment */}
           <section aria-labelledby="fulfillment-heading">
             <h2 id="fulfillment-heading" className="mb-3 text-sm font-[650] text-muted">
@@ -318,6 +397,25 @@ export function CheckoutPage() {
                   </Button>
                 </div>
               )}
+              {/* Warn-only: address in a different county than the branch. Never
+                  blocks placing the order — the server decides delivery range. */}
+              <div className="mt-3 empty:hidden">
+                <CountyMismatchNotice
+                  branchCounty={branch?.address.county}
+                  addressCounty={addressCounty}
+                  suggestion={
+                    suggestionBranch
+                      ? {
+                          branchName: suggestionBranch.name,
+                          onSwitch: () => {
+                            setSwitchTarget(suggestionBranch)
+                            setPickerOpen(true)
+                          },
+                        }
+                      : undefined
+                  }
+                />
+              </div>
             </section>
           )}
 
@@ -449,6 +547,23 @@ export function CheckoutPage() {
           )}
         </div>
       )}
+
+      <BranchPickerDialog
+        open={pickerOpen}
+        onOpenChange={(open) => {
+          setPickerOpen(open)
+          if (!open) setSwitchTarget(null)
+        }}
+        branches={restaurantQuery.data?.branches ?? []}
+        selectedId={cart.branchId}
+        mode="moveOrder"
+        initialTarget={switchTarget}
+        onSelected={(b) => {
+          // The dialog has already cleared the cart if this was a real switch.
+          selectBranch(b.id)
+          navigate('/menu')
+        }}
+      />
     </main>
   )
 }

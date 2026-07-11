@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useSelectedBranch } from '@/lib/branch-selection'
 import { hoursByDay } from '@/lib/hours'
+import { mapsUrlFor } from '@/lib/maps'
 import { formatCents } from '@/lib/money'
 
 function BranchCard({ branchId }: { branchId: string }) {
@@ -30,10 +31,7 @@ function BranchCard({ branchId }: { branchId: string }) {
     )
   }
 
-  const mapsUrl =
-    branch.address.latitude != null && branch.address.longitude != null
-      ? `https://maps.apple.com/?ll=${branch.address.latitude},${branch.address.longitude}&q=${encodeURIComponent(branch.name)}`
-      : `https://maps.apple.com/?q=${encodeURIComponent(`${branch.address.line1}, ${branch.address.town}`)}`
+  const mapsUrl = mapsUrlFor(branch.name, branch.address)
 
   return (
     <article className="overflow-hidden rounded-[24px] border border-border bg-bg shadow-raised">

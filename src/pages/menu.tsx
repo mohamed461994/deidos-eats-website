@@ -1,14 +1,18 @@
+import { MapPin } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
 import type { MenuItem } from '@/api/types'
 import { errorMessage } from '@/api'
 import { useMenu, useRestaurant } from '@/api/queries'
+import { BranchChooser, BranchPickerDialog } from '@/components/branch-picker'
 import { FoodImage } from '@/components/food-image'
 import { ItemDialog } from '@/components/item-dialog'
 import { ErrorState } from '@/components/states'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { useSelectedBranch } from '@/lib/branch-selection'
+import { useCart } from '@/cart/context'
+import { resolveSelectedBranch, useSelectedBranch } from '@/lib/branch-selection'
 import { formatCents } from '@/lib/money'
 import { cn } from '@/lib/utils'
 
@@ -20,11 +24,14 @@ export function MenuPage() {
   const restaurantQuery = useRestaurant()
   const restaurant = restaurantQuery.data
   const [selectedBranchId, selectBranch] = useSelectedBranch()
-  const branchId = selectedBranchId ?? restaurant?.branches[0]?.id ?? null
+  // No silent default: an unresolved selection with multiple branches → the gate.
+  const branchId = resolveSelectedBranch(restaurant?.branches, selectedBranchId)
   const branch = restaurant?.branches.find((b) => b.id === branchId)
   const menuQuery = useMenu(branchId)
   const menu = menuQuery.data
+  const { cart } = useCart()
 
+  const [pickerOpen, setPickerOpen] = useState(false)
   const [activeItem, setActiveItem] = useState<MenuItem | null>(null)
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
   const sectionsRef = useRef<Map<string, HTMLElement>>(new Map())
@@ -59,43 +66,69 @@ export function MenuPage() {
     )
   }
 
+  // Branch gate — only once the restaurant has loaded (never flash it while the
+  // restaurant query is still pending, which would also read as branchId === null).
+  if (restaurant && branchId === null) {
+    return (
+      <main className="mx-auto max-w-6xl px-4 pb-24 sm:px-6">
+        <header className="pt-10 pb-6">
+          <h1 className="display text-[clamp(2rem,4.5vw,3.25rem)]">Which Púca is yours?</h1>
+          <p className="mt-3 max-w-lg text-muted">
+            We fire pizzas in more than one spot. Pick your branch and we'll show its menu —
+            you can change it any time.
+          </p>
+        </header>
+        <BranchChooser
+          branches={restaurant.branches}
+          onSelect={(b) => selectBranch(b.id)}
+        />
+      </main>
+    )
+  }
+
   return (
     <main className="mx-auto max-w-6xl px-4 pb-24 sm:px-6">
       <header className="pt-10 pb-6">
         <h1 className="display text-[clamp(2rem,4.5vw,3.25rem)]">The menu</h1>
-        {/* Branch picker */}
-        <div role="radiogroup" aria-label="Choose a branch" className="mt-5 flex flex-wrap gap-2">
-          {(restaurant?.branches ?? []).map((b) => {
-            const selected = b.id === branchId
-            return (
-              <button
-                key={b.id}
-                type="button"
-                role="radio"
-                aria-checked={selected}
-                onClick={() => selectBranch(b.id)}
-                className={cn(
-                  'flex h-11 items-center gap-2 rounded-full border px-5 text-[15px] font-[550] transition-colors',
-                  selected
-                    ? 'border-basil bg-basil text-on-basil'
-                    : 'border-border text-ink hover:bg-surface',
-                )}
-              >
-                {b.name}
-                {!b.isOpen && (
-                  <span className={cn('text-[13px]', selected ? 'text-on-basil/80' : 'text-muted')}>
-                    · Closed
-                  </span>
-                )}
-              </button>
-            )
-          })}
-        </div>
+        {/* Branch context — always visible, always one tap from changing */}
+        {branch && (
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <p className="flex items-center gap-2 text-[15px]">
+              <MapPin className="size-4 shrink-0 text-basil" aria-hidden />
+              Ordering from <strong className="font-[650]">{branch.name}</strong>
+              <span className={cn('font-[550]', branch.isOpen ? 'text-basil' : 'text-muted')}>
+                · {branch.isOpen ? 'Open now' : 'Closed'}
+              </span>
+            </p>
+            <Button variant="outline" size="sm" onClick={() => setPickerOpen(true)}>
+              Change branch
+            </Button>
+          </div>
+        )}
         {branch && !branch.isOpen && (
           <p role="status" className="mt-3 text-[15px] text-muted">
             {branch.name} is closed right now — you can browse, but ordering opens with the
             kitchen. Hours are on the locations page.
           </p>
+        )}
+        {/* Browsing a different branch than the cart — informational, not a blocker */}
+        {branch && cart.branchId && cart.branchId !== branch.id && cart.lines.length > 0 && (
+          <div
+            role="status"
+            className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-[16px] border border-border bg-surface px-4 py-3"
+          >
+            <p className="text-[15px]">
+              You're browsing <strong className="font-[650]">{branch.name}</strong> — your cart
+              is from <strong className="font-[650]">{cart.branchName}</strong>.
+            </p>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => cart.branchId && selectBranch(cart.branchId)}
+            >
+              View {cart.branchName} menu
+            </Button>
+          </div>
         )}
       </header>
 
@@ -203,6 +236,14 @@ export function MenuPage() {
           onClose={() => setActiveItem(null)}
         />
       )}
+
+      <BranchPickerDialog
+        open={pickerOpen}
+        onOpenChange={setPickerOpen}
+        branches={restaurant?.branches ?? []}
+        selectedId={branchId}
+        onSelected={(b) => selectBranch(b.id)}
+      />
     </main>
   )
 }

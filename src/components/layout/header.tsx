@@ -1,9 +1,12 @@
-import { ShoppingBag, UserRound } from 'lucide-react'
+import { MapPin, ShoppingBag, UserRound } from 'lucide-react'
+import { useState } from 'react'
 import { Link, NavLink } from 'react-router-dom'
 
-import { useMe } from '@/api/queries'
+import { useMe, useRestaurant } from '@/api/queries'
 import { useAuth } from '@/auth/context'
 import { useCart } from '@/cart/context'
+import { BranchPickerDialog } from '@/components/branch-picker'
+import { resolveSelectedBranch, useSelectedBranch } from '@/lib/branch-selection'
 import { formatCents } from '@/lib/money'
 import { cn } from '@/lib/utils'
 
@@ -17,6 +20,13 @@ export function Header() {
   const { itemCount, subtotalCents, openCart } = useCart()
   const { status } = useAuth()
   const me = useMe()
+
+  const { data: restaurant } = useRestaurant()
+  const [selectedBranchId, selectBranch] = useSelectedBranch()
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const effectiveBranchId = resolveSelectedBranch(restaurant?.branches, selectedBranchId)
+  const branch = restaurant?.branches.find((b) => b.id === effectiveBranchId)
+  const branchChipLabel = branch ? `Branch: ${branch.name}. Change branch` : 'Choose a branch'
 
   // Surface the signed-in user's first name next to the account icon. While /me
   // is loading, errored, or has no name, `firstName` is empty and we fall back
@@ -53,7 +63,37 @@ export function Header() {
           )}
         </nav>
 
+        {/* Branch chip (desktop) — always shows which branch is active */}
+        <button
+          type="button"
+          onClick={() => setPickerOpen(true)}
+          className="ml-1 hidden h-11 items-center gap-2 rounded-full border border-border px-4 text-[15px] font-[550] text-ink transition-colors hover:bg-surface sm:flex"
+          aria-label={branchChipLabel}
+        >
+          <MapPin className="size-4 shrink-0 text-basil" aria-hidden />
+          <span className="max-w-[9rem] truncate">{branch ? branch.name : 'Choose branch'}</span>
+          {branch && (
+            <span
+              aria-hidden
+              className={cn('size-2 shrink-0 rounded-full', branch.isOpen ? 'bg-basil' : 'bg-muted')}
+            />
+          )}
+        </button>
+
         <div className="ml-auto flex items-center gap-2">
+          {/* Branch chip (mobile) — compact, keeps the 44px hit target */}
+          <button
+            type="button"
+            onClick={() => setPickerOpen(true)}
+            className="flex h-11 items-center gap-1.5 rounded-full border border-border px-3 text-[15px] font-[550] text-ink transition-colors hover:bg-surface sm:hidden"
+            aria-label={branchChipLabel}
+          >
+            <MapPin className="size-4 shrink-0 text-basil" aria-hidden />
+            <span className="max-w-[4.5rem] truncate">
+              {branch ? branch.name.replace('Púca ', '') : 'Branch'}
+            </span>
+          </button>
+
           <Link
             to={status === 'signedIn' ? '/account' : '/signin'}
             className={cn(
@@ -98,6 +138,14 @@ export function Header() {
           </button>
         </div>
       </div>
+
+      <BranchPickerDialog
+        open={pickerOpen}
+        onOpenChange={setPickerOpen}
+        branches={restaurant?.branches ?? []}
+        selectedId={effectiveBranchId}
+        onSelected={(b) => selectBranch(b.id)}
+      />
     </header>
   )
 }

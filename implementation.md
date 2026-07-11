@@ -143,7 +143,13 @@ expired" copy.
   cross-branch adds require explicit confirmation. Cart totals are estimates; the priced
   cart from validate/checkout is authoritative and any input change expires the quote
   (signature check in `src/pages/checkout.tsx`).
-- **Branch selection**: `localStorage['puca-branch-v1']` via `useSyncExternalStore`.
+- **Branch selection**: `localStorage['puca-branch-v1']` is the single source of truth via
+  `useSyncExternalStore` (`src/lib/branch-selection.ts`) — `getSnapshot` reads storage fresh so
+  the store can't drift out of sync. `resolveSelectedBranch(branches, storedId)` never silently
+  defaults to `branches[0]`: it returns the stored id only if it still exists, auto-selects the
+  sole branch of a single-branch restaurant, and otherwise returns `null` (which shows the gate —
+  see the branch-clarity note below). A stale/removed stored id resolves to `null`, not a wrong
+  branch.
 - **Live updates**: `src/api/ws.ts` — WS connect with `?token=`, exponential backoff
   reconnect (2s→30s), poke → `invalidateQueries(order/x)`. Mock mode replays the simulated
   kitchen's events through the same interface.
@@ -169,6 +175,40 @@ expired" copy.
 
 **Cash**: `paymentMethod: 'cash'` (only when branch `cashEnabled`) skips Stripe entirely;
 order is placed immediately and the site navigates straight to tracking.
+
+### 4.1 Branch clarity — never order from the wrong branch
+
+The chain has multiple branches per restaurant (currently Ranelagh/Dublin and Washington
+Street/Cork). The site keeps two separate concepts, as before: the **browsing branch**
+(`useSelectedBranch`, localStorage) and the **cart branch** (`cart.branchId`). Selecting a branch
+anywhere only sets the browsing branch and **never touches the cart**; the cart changes branch only
+via the existing add-time conflict confirm or an explicit "switch & start fresh" confirm at
+checkout. Guardrails:
+
+- **Menu gate** (`src/pages/menu.tsx`): with more than one branch and no explicit choice, the menu
+  is replaced by an inline `BranchChooser` ("Which Púca is yours?") instead of silently defaulting
+  to the first branch. Skeletons show while the restaurant query is pending, so the gate never
+  flashes. Once a branch is effective, a compact "Ordering from … · Open/Closed" row with a
+  **Change branch** button (opens the picker dialog) replaces the old radio pills.
+- **Header chip** (`src/components/layout/header.tsx`): an always-visible `MapPin` + branch-name
+  chip (desktop after the nav, compact on mobile, 44px hit target). No valid selection → "Choose
+  branch". Opens the same `BranchPickerDialog`.
+- **Shared component** (`src/components/branch-picker.tsx`): one `BranchChooser` (cards with open
+  state, town + county, collection/delivery info incl. "up to X km", optional **Use my location**
+  → distances via `haversineKm` + a "Nearest" badge; location is never requested automatically and
+  coordinates are never logged or stored) and one `BranchPickerDialog` wrapping it in the `Modal`.
+  In `moveOrder` mode (checkout) switching to a different branch confirms and clears the cart first.
+- **Checkout guardrails** (`src/pages/checkout.tsx`): a prominent branch card with the full address
+  + maps link and **Change branch**; for collection it reads "You'll collect from here" (address is
+  the star). Delivery shows a **warn-only** county-mismatch banner (`CountyMismatchNotice`,
+  `role="alert"`) when the address county ≠ branch county — **Place order stays enabled** (the
+  server is the authority on range), with a one-tap "Switch to {branch}" when another branch sits
+  in the address's county.
+- **Order tracking** (`src/pages/order-tracking.tsx`): collection orders show a "Collect from"
+  address + maps link (`useBranch(order.branchId)`); delivery orders are unchanged.
+
+Small shared helpers: `src/lib/distance.ts` (`haversineKm`/`formatKm`, `sameCounty` normalization),
+`src/lib/maps.ts` (`mapsUrlFor`, extracted from `locations.tsx` and reused by checkout/tracking).
 
 ## 5. Mock leftovers — test harness only (see §0)
 
@@ -299,6 +339,13 @@ allowlist (§8.2).
    only fire for status changes; a completed payment (`paymentStatus` flip) doesn't emit a
    buyer-visible event, so the tracking page also refetches on window focus. Consider a
    `payment.updated` WS message type.
+9. **Delivery-radius enforcement at buyer checkout** *(recommended)* — `deliveryRadiusKm` is public
+   on the branch DTO but **never enforced** for buyer orders: `cart/service.ts` never reads it and
+   `delivery-fee.ts` fails safe to the base/tiered fee, so an out-of-range delivery (e.g. a Cork
+   address ordering from the Dublin branch) is accepted. The website added a **warn-only**
+   county-mismatch banner (§4.1, chosen as website-only for now), but the real fix is server-side:
+   enforce `deliveryRadiusKm` in `cart/service.ts` pricing and reject with a contract error reason
+   (e.g. `out_of_delivery_range`) so iOS and the website both get a hard, authoritative stop.
 
 ## 9. Future features roadmap (plan only — not built)
 
