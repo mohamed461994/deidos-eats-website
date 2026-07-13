@@ -12,6 +12,9 @@ import type {
   CartValidateRequest,
   CheckoutRequest,
   CheckoutResponse,
+  MarketplaceBranch,
+  MarketplaceHome,
+  MarketplaceItem,
   Menu,
   MenuItem,
   Order,
@@ -23,9 +26,18 @@ import type {
   User,
   UserUpdate,
 } from '@/api/types'
+import { haversineKm } from '@/lib/distance'
 
 import { ApiError } from '../errors'
-import { allRestaurants, branches, menus, restaurantForBranch, restaurantList } from './data'
+import {
+  activePromoFor,
+  allRestaurants,
+  branches,
+  menus,
+  mockMarketplace,
+  publishedRestaurants,
+  restaurantForBranch,
+} from './data'
 import { mockStore } from './store'
 
 const LATENCY_MS = 350
@@ -70,6 +82,8 @@ function vatBreakdownFor(lines: PricedCartLine[]) {
 function priceCart(branch: Branch, request: CartValidateRequest): PricedCart {
   const menu = menus[branch.id]
   if (!menu) fail(404, 'not_found', 'Branch not found.')
+  // One pricing instant per request — the server's half-open promo-window rule.
+  const now = Date.now()
 
   const lines: PricedCartLine[] = request.lines.map((lineInput) => {
     const item = findMenuItem(menu, lineInput.menuItemId)
@@ -90,8 +104,12 @@ function priceCart(branch: Branch, request: CartValidateRequest): PricedCart {
       }
     })
 
-    const unitPriceCents =
-      item.priceCents + modifiers.reduce((sum, m) => sum + m.priceDeltaCents, 0)
+    // Effective online price: the active promo price when one applies, else
+    // base — with the base snapshotted on the line so receipts stay truthful.
+    const promo = activePromoFor(item.id, now)
+    const deltaCents = modifiers.reduce((sum, m) => sum + m.priceDeltaCents, 0)
+    const baseUnitCents = item.priceCents + deltaCents
+    const unitPriceCents = (promo ? promo.promoPriceCents : item.priceCents) + deltaCents
     return {
       menuItemId: item.id,
       name: item.name,
@@ -99,6 +117,13 @@ function priceCart(branch: Branch, request: CartValidateRequest): PricedCart {
       unitPriceCents,
       lineTotalCents: unitPriceCents * lineInput.quantity,
       vatRateBasisPoints: item.vatRateBasisPoints,
+      ...(promo
+        ? {
+            originalUnitPriceCents: baseUnitCents,
+            discountCents: item.priceCents - promo.promoPriceCents,
+            discountSource: 'online_promo' as const,
+          }
+        : {}),
       ...(modifiers.length > 0 ? { modifiers } : {}),
     }
   })
@@ -134,7 +159,7 @@ function priceCart(branch: Branch, request: CartValidateRequest): PricedCart {
 
 export async function listRestaurants(): Promise<RestaurantList> {
   await delay()
-  return { items: restaurantList, pageInfo: { nextCursor: null } }
+  return { items: publishedRestaurants(), pageInfo: { nextCursor: null } }
 }
 
 export async function getRestaurant(restaurantId: string): Promise<Restaurant> {
@@ -162,7 +187,152 @@ export async function getBranchMenu(branchId: string): Promise<Menu> {
   await delay()
   const menu = menus[branchId]
   if (!menu) fail(404, 'not_found', 'Branch not found.')
-  return menu
+  // Project promos the way the server's public menu mapper does: `priceCents`
+  // stays the base price everywhere; the promo fields exist only while active.
+  const now = Date.now()
+  return {
+    ...menu,
+    categories: menu.categories.map((category) => ({
+      ...category,
+      items: category.items.map((item) => {
+        const promo = activePromoFor(item.id, now)
+        return {
+          ...item,
+          onlinePromoPriceCents: promo ? promo.promoPriceCents : null,
+          promoEndsAt:
+            promo && promo.endsAtMs !== null ? new Date(promo.endsAtMs).toISOString() : null,
+        }
+      }),
+    })),
+  }
+}
+
+/* ---- marketplace home --------------------------------------------------- */
+
+const HOME_RADIUS_KM = 15 // mirrors the server's DEFAULT_HOME_RADIUS_KM content default
+const MERCH_CAP = 12
+const FEED_CAP = 24
+
+function roundKm(km: number): number {
+  return Math.round(km * 10) / 10
+}
+
+function marketplaceItemFor(
+  restaurant: Restaurant,
+  branchId: string,
+  item: MenuItem,
+  nowMs: number,
+  coords: { latitude: number; longitude: number } | null,
+): MarketplaceItem | null {
+  const branch = restaurant.branches.find((b) => b.id === branchId)
+  if (!branch) return null
+  const promo = activePromoFor(item.id, nowMs)
+  const distanceKm =
+    coords && branch.latitude != null && branch.longitude != null
+      ? roundKm(
+          haversineKm(coords, { latitude: branch.latitude, longitude: branch.longitude }),
+        )
+      : null
+  // Located callers only see items within the home radius (the server's geo scope).
+  if (coords && (distanceKm === null || distanceKm > HOME_RADIUS_KM)) return null
+  return {
+    itemId: item.id,
+    name: item.name,
+    imageUrl: item.imageUrl ?? null,
+    priceCents: item.priceCents,
+    onlinePromoPriceCents: promo ? promo.promoPriceCents : null,
+    promoEndsAt: promo && promo.endsAtMs !== null ? new Date(promo.endsAtMs).toISOString() : null,
+    branchId,
+    branchName: branch.name,
+    restaurantName: restaurant.name,
+    restaurantSlug: restaurant.slug,
+    distanceKm,
+  }
+}
+
+export async function getMarketplaceHome(coords?: {
+  lat: number
+  lng: number
+}): Promise<MarketplaceHome> {
+  await delay()
+  if (mockMarketplace.failHomeRequests > 0) {
+    mockMarketplace.failHomeRequests -= 1
+    fail(500, 'internal_error', 'Something went wrong.')
+  }
+  const now = Date.now()
+  const located = coords ? { latitude: coords.lat, longitude: coords.lng } : null
+  const source = publishedRestaurants()
+  // Merchandising strips only ever sell from restaurants that can take the order.
+  const accepting = source.filter((r) => r.marketplaceStatus === 'acceptingOrders')
+
+  const ovenItems = mockMarketplace.ovenPicks
+    .flatMap((pick) => {
+      const restaurant = accepting.find((r) => r.branches.some((b) => b.id === pick.branchId))
+      const menu = menus[pick.branchId]
+      const item = menu ? findMenuItem(menu, pick.itemId) : undefined
+      if (!restaurant || !item) return []
+      const entry = marketplaceItemFor(restaurant, pick.branchId, item, now, located)
+      return entry ? [entry] : []
+    })
+    .slice(0, MERCH_CAP)
+
+  const discountedItems = accepting
+    .flatMap((restaurant) =>
+      restaurant.branches.flatMap((branch) => {
+        const menu = menus[branch.id]
+        if (!menu) return []
+        return menu.categories.flatMap((category) =>
+          category.items.flatMap((item) => {
+            if (!activePromoFor(item.id, now)) return []
+            const entry = marketplaceItemFor(restaurant, branch.id, item, now, located)
+            return entry ? [entry] : []
+          }),
+        )
+      }),
+    )
+    .slice(0, MERCH_CAP)
+
+  // The branch feed is never radius-filtered: nearest-first when located
+  // (unlocatable branches last), open-first + name otherwise — like the server.
+  const cards: MarketplaceBranch[] = source.flatMap((restaurant) =>
+    restaurant.branches.map((branch) => ({
+      id: branch.id,
+      name: branch.name,
+      town: branch.town ?? null,
+      restaurantSlug: restaurant.slug,
+      restaurantName: restaurant.name,
+      isOpen:
+        restaurant.marketplaceStatus === 'acceptingOrders' &&
+        branch.isOpen &&
+        (branch.fulfillment.collectionEnabled || branch.fulfillment.deliveryEnabled),
+      fulfillment: branch.fulfillment,
+      latitude: branch.latitude ?? null,
+      longitude: branch.longitude ?? null,
+      distanceKm:
+        located && branch.latitude != null && branch.longitude != null
+          ? roundKm(
+              haversineKm(located, { latitude: branch.latitude, longitude: branch.longitude }),
+            )
+          : null,
+    })),
+  )
+  cards.sort((a, b) => {
+    if (located) {
+      return (
+        (a.distanceKm ?? Infinity) - (b.distanceKm ?? Infinity) || a.name.localeCompare(b.name)
+      )
+    }
+    if (a.isOpen !== b.isOpen) return a.isOpen ? -1 : 1
+    return a.name.localeCompare(b.name)
+  })
+
+  return {
+    banners: mockMarketplace.banners,
+    ovenItems,
+    discountedItems,
+    branches: { items: cards.slice(0, FEED_CAP), total: cards.length },
+    content: { ...mockMarketplace.content },
+  }
 }
 
 /* ---- cart / checkout --------------------------------------------------- */

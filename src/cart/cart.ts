@@ -3,7 +3,7 @@
  * the platform has no server-side cart; the server reprices everything at
  * validate/checkout, so totals here are estimates for display only.
  */
-import type { CartLineInput, MenuItem, ModifierOption } from '@/api/types'
+import type { CartLineInput, MenuItem, ModifierOption, PricedCart } from '@/api/types'
 
 export interface CartModifier {
   optionId: string
@@ -58,6 +58,24 @@ export function lineKey(menuItemId: string, optionIds: string[]): string {
   return [menuItemId, ...[...optionIds].sort()].join('|')
 }
 
+/**
+ * THE effective online unit price: the active promo price when one applies
+ * (`onlinePromoPriceCents` is only ever non-null while active), else base,
+ * plus the selected modifier deltas. Every client-side estimate — cart lines,
+ * the item dialog's CTA — derives from this one helper so the displayed price
+ * can never drift between surfaces; the server re-prices authoritatively at
+ * validate/checkout.
+ */
+export function effectiveUnitPriceCents(
+  item: Pick<MenuItem, 'priceCents' | 'onlinePromoPriceCents'>,
+  selectedOptions: readonly Pick<ModifierOption, 'priceDeltaCents'>[],
+): number {
+  return (
+    (item.onlinePromoPriceCents ?? item.priceCents) +
+    selectedOptions.reduce((sum, option) => sum + option.priceDeltaCents, 0)
+  )
+}
+
 export function buildLine(
   item: MenuItem,
   selectedOptions: ModifierOption[],
@@ -73,7 +91,7 @@ export function buildLine(
     menuItemId: item.id,
     name: item.name,
     imageUrl: item.imageUrl ?? null,
-    unitPriceCents: item.priceCents + modifiers.reduce((sum, m) => sum + m.priceDeltaCents, 0),
+    unitPriceCents: effectiveUnitPriceCents(item, selectedOptions),
     quantity,
     modifiers,
   }
@@ -146,6 +164,40 @@ export function cartItemCount(state: CartState): number {
 /** Display estimate only — the server's priced cart is authoritative. */
 export function cartSubtotalCents(state: CartState): number {
   return state.lines.reduce((sum, l) => sum + l.unitPriceCents * l.quantity, 0)
+}
+
+/**
+ * How the kitchen's quote relates to what the basket displayed — the promo
+ * honesty check (plan §8). `repricedUp` means the server priced the items
+ * ABOVE the basket's estimate (a promo expired since adding); checkout must
+ * then show the change and require explicit buyer acceptance. Priced lines
+ * answer the request's lines in order, so the per-line join is by index with
+ * a menuItemId guard.
+ */
+export interface QuoteComparison {
+  /** What the basket showed the buyer (the client-side estimate). */
+  displayedSubtotalCents: number
+  /** True when the quote's items subtotal exceeds the displayed estimate. */
+  repricedUp: boolean
+  /** Per priced line: the basket's line total it answers, or null when unmatched. */
+  basketLineTotals: Array<number | null>
+}
+
+export function compareQuoteToBasket(
+  state: CartState,
+  quote: Pick<PricedCart, 'subtotalCents' | 'lines'>,
+): QuoteComparison {
+  const displayedSubtotalCents = cartSubtotalCents(state)
+  return {
+    displayedSubtotalCents,
+    repricedUp: quote.subtotalCents > displayedSubtotalCents,
+    basketLineTotals: quote.lines.map((line, index) => {
+      const basketLine = state.lines[index]
+      return basketLine && basketLine.menuItemId === line.menuItemId
+        ? basketLine.unitPriceCents * basketLine.quantity
+        : null
+    }),
+  }
 }
 
 /** Contract shape for POST cart/validate and /checkout. */

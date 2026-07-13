@@ -124,4 +124,17 @@ describe('cartReducer', () => {
       { menuItemId: 'item-1', quantity: 1, selectedModifierOptionIds: ['o1'] },
     ])
   })
+
+  it('prices a line at the active online promo (what the buyer is charged)', () => {
+    const onOffer: MenuItem = {
+      ...pizza,
+      onlinePromoPriceCents: 950,
+      promoEndsAt: '2026-07-13T20:00:00.000Z',
+    }
+    // Promo price + modifier delta; base price is not part of the estimate.
+    expect(buildLine(onOffer, [nduja], 1).unitPriceCents).toBe(1150)
+    expect(buildLine(onOffer, [], 1).unitPriceCents).toBe(950)
+    // No active promo (null or absent) → base price, unchanged behavior.
+    expect(buildLine({ ...pizza, onlinePromoPriceCents: null }, [], 1).unitPriceCents).toBe(1150)
+  })
 })

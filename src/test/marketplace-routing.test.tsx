@@ -1,7 +1,9 @@
 /**
- * Marketplace routing against the two-restaurant mock: discovery → `/r/:slug` →
- * branch-in-URL menu, plus soft-404 for unknown slugs and the unavailable states
- * (coming-soon, paused). Drives the REAL <App/> (router, providers, pages).
+ * Marketplace routing against the two-restaurant mock: the retained
+ * `/restaurants` card page → `/r/:slug` → branch-in-URL menu, plus soft-404
+ * for unknown slugs and the unavailable states (coming-soon, paused). The
+ * branch-first home page (`/`) has its own suite (home-page.test.tsx).
+ * Drives the REAL <App/> (router, providers, pages).
  */
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -31,8 +33,8 @@ beforeEach(() => localStorage.clear())
 afterEach(() => cleanup())
 
 describe('marketplace routing', () => {
-  it('discovery lists both restaurants as cards', async () => {
-    renderAt('/')
+  it('the retained /restaurants page still lists both restaurants as cards', async () => {
+    renderAt('/restaurants')
     await screen.findByRole('heading', { name: /choose a restaurant/i }, { timeout: 5000 })
     expect(await screen.findByRole('heading', { name: 'Deidos Grill' })).toBeInTheDocument()
     expect(await screen.findByRole('heading', { name: "Nonna's Table" })).toBeInTheDocument()
@@ -40,8 +42,8 @@ describe('marketplace routing', () => {
     expect(screen.queryByRole('searchbox')).toBeNull()
   })
 
-  it('a discovery card links into the restaurant home (slug in the URL)', async () => {
-    renderAt('/')
+  it('a /restaurants card links into the restaurant home (slug in the URL)', async () => {
+    renderAt('/restaurants')
     const link = await screen.findByRole('link', { name: /Deidos Grill/i }, { timeout: 5000 })
     fireEvent.click(link)
     expect(window.location.pathname).toBe('/r/deidos-grill')
@@ -76,9 +78,9 @@ describe('marketplace routing', () => {
     expect(await screen.findByRole('button', { name: /browse menu/i })).toBeInTheDocument()
   })
 
-  it('redirects the legacy /menu path to discovery', async () => {
+  it('redirects the legacy /menu path to the home page', async () => {
     renderAt('/menu')
-    await screen.findByRole('heading', { name: /choose a restaurant/i }, { timeout: 5000 })
+    await screen.findByRole('heading', { name: /hungry\?/i }, { timeout: 5000 })
     expect(window.location.pathname).toBe('/')
   })
 })

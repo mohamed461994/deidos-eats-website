@@ -10,7 +10,14 @@
  * more restaurants (coming-soon, paused) are reachable BY SLUG only — they drive
  * the unavailable-state tests without changing the two-card discovery list.
  */
-import type { Branch, BranchSummary, Menu, Restaurant } from '@/api/types'
+import type {
+  Branch,
+  BranchSummary,
+  MarketplaceBanner,
+  MarketplaceContent,
+  Menu,
+  Restaurant,
+} from '@/api/types'
 
 const img = (id: string, w = 1200) =>
   `https://images.unsplash.com/photo-${id}?auto=format&fit=crop&w=${w}&q=80`
@@ -140,6 +147,8 @@ function toSummary(branch: Branch): BranchSummary {
     town: branch.address.town,
     imageUrl: branch.imageUrl,
     isOpen: branch.isOpen,
+    latitude: branch.address.latitude,
+    longitude: branch.address.longitude,
     fulfillment: branch.fulfillment,
     payment: branch.payment,
   }
@@ -431,4 +440,108 @@ export function restaurantForBranch(branchId: string): Restaurant | undefined {
   const branch = branches[branchId]
   if (!branch) return undefined
   return allRestaurants.find((r) => r.id === branch.restaurantId)
+}
+
+/* ---- Marketplace home (banners, oven picks, online promos, content) ----- */
+
+/**
+ * Raw online-promo config, keyed by menu item id. The mock API projects it the
+ * way the server does: the public fields (`onlinePromoPriceCents`,
+ * `promoEndsAt`) exist ONLY while the promo is active at read time, and cart
+ * pricing charges the promo with `originalUnitPriceCents`/`discountCents`/
+ * `discountSource` snapshotted on the line. `endsAtMs: null` = no scheduled
+ * end. Expiry therefore behaves like the real API: advance the clock past
+ * `endsAtMs` and the next read prices at base.
+ */
+export interface MockPromo {
+  promoPriceCents: number
+  endsAtMs: number | null
+}
+
+function defaultPromos(): Record<string, MockPromo> {
+  const inTwoHours = Date.now() + 2 * 60 * 60 * 1000
+  return {
+    [`i-house-${DUBLIN_BRANCH_ID}`]: { promoPriceCents: 1150, endsAtMs: inTwoHours },
+    [`i-fries-${CORK_BRANCH_ID}`]: { promoPriceCents: 425, endsAtMs: inTwoHours },
+    [`i-caesar-${GALWAY_BRANCH_ID}`]: { promoPriceCents: 750, endsAtMs: null },
+  }
+}
+
+export interface MockOvenPick {
+  branchId: string
+  itemId: string
+}
+
+function defaultOvenPicks(): MockOvenPick[] {
+  return [
+    { branchId: DUBLIN_BRANCH_ID, itemId: `i-double-${DUBLIN_BRANCH_ID}` },
+    { branchId: GALWAY_BRANCH_ID, itemId: `i-classic-${GALWAY_BRANCH_ID}` },
+    { branchId: CORK_BRANCH_ID, itemId: `i-buttermilk-${CORK_BRANCH_ID}` },
+  ]
+}
+
+function defaultBanners(): MarketplaceBanner[] {
+  return [
+    {
+      id: 'ban10000-0000-4000-8000-000000000001',
+      title: 'Bank holiday, sorted',
+      body: 'Every kitchen is firing all weekend — order ahead and skip the queue.',
+      imageUrl: img('1504674900247-0877df9cc836', 1600),
+      linkUrl: null,
+    },
+  ]
+}
+
+/** All-null = admin hasn't set copy: the site renders its own defaults, badges hidden. */
+function defaultContent(): MarketplaceContent {
+  return {
+    heroHeading: null,
+    heroSubheading: null,
+    ovenSectionTitle: null,
+    discountedSectionTitle: null,
+    branchesSectionTitle: null,
+    footerNote: null,
+    appStoreUrl: null,
+    playStoreUrl: null,
+  }
+}
+
+/**
+ * Mutable marketplace state — tests reshape it (empty a section, add a paused
+ * restaurant to the feed, move a promo boundary) and call
+ * `resetMarketplaceForTests()` in between. `restaurants: null` means "use the
+ * standard published list"; setting an array replaces the source for BOTH
+ * `GET /restaurants` and the home branch feed, exactly like the server's
+ * single publication gate.
+ */
+export const mockMarketplace = {
+  promos: defaultPromos(),
+  ovenPicks: defaultOvenPicks(),
+  banners: defaultBanners(),
+  content: defaultContent(),
+  restaurants: null as Restaurant[] | null,
+  /** Fail the next N GET /marketplace/home calls with a 500 (error-state tests). */
+  failHomeRequests: 0,
+}
+
+export function resetMarketplaceForTests() {
+  mockMarketplace.promos = defaultPromos()
+  mockMarketplace.ovenPicks = defaultOvenPicks()
+  mockMarketplace.banners = defaultBanners()
+  mockMarketplace.content = defaultContent()
+  mockMarketplace.restaurants = null
+  mockMarketplace.failHomeRequests = 0
+}
+
+/** The publication-gated restaurant source shared by /restaurants and the home feed. */
+export function publishedRestaurants(): Restaurant[] {
+  return mockMarketplace.restaurants ?? restaurantList
+}
+
+/** The active online promo for an item at `nowMs`, or null (mirrors the server's half-open window). */
+export function activePromoFor(itemId: string, nowMs: number): MockPromo | null {
+  const promo = mockMarketplace.promos[itemId]
+  if (!promo) return null
+  if (promo.endsAtMs !== null && nowMs >= promo.endsAtMs) return null
+  return promo
 }

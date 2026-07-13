@@ -10,6 +10,7 @@ import * as mock from './mock/api'
 
 export const api = {
   listRestaurants: isMock ? mock.listRestaurants : live.listRestaurants,
+  getMarketplaceHome: isMock ? mock.getMarketplaceHome : live.getMarketplaceHome,
   getRestaurant: isMock ? mock.getRestaurant : live.getRestaurant,
   getRestaurantBySlug: isMock ? mock.getRestaurantBySlug : live.getRestaurantBySlug,
   getBranch: isMock ? mock.getBranch : live.getBranch,

@@ -17,7 +17,7 @@ import {
   mockConfirmCardPayment,
   validateCart,
 } from './api'
-import { DUBLIN_BRANCH_ID, menus } from './data'
+import { DUBLIN_BRANCH_ID, menus, mockMarketplace, resetMarketplaceForTests } from './data'
 import { mockStore } from './store'
 
 const pizzaId = menus[DUBLIN_BRANCH_ID].categories[0].items[0].id
@@ -38,6 +38,9 @@ beforeEach(async () => {
   vi.useFakeTimers()
   localStorage.clear()
   mockStore.resetForTests()
+  resetMarketplaceForTests()
+  // This suite asserts BASE pricing; online-promo pricing has its own tests.
+  mockMarketplace.promos = {}
   // Sign-in requires a confirmed account (mirrors Cognito), so create one.
   await settle(mockAuthProvider.signUp('demo@puca.ie', 'a-long-password!', 'Demo Buyer'))
   await settle(mockAuthProvider.confirmSignUp('demo@puca.ie', '123456'))

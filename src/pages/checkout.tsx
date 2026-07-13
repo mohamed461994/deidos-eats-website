@@ -16,6 +16,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { TextAreaField } from '@/components/ui/field'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useToast } from '@/components/ui/toast'
 import { isMock } from '@/config'
 import { useRememberedBranch } from '@/lib/branch-selection'
 import { sameCounty } from '@/lib/distance'
@@ -34,6 +35,7 @@ type PaymentMethod = 'card' | 'cash'
 export function CheckoutPage() {
   const { status } = useAuth()
   const { cart, lineInputs, clearCart, itemCount } = useCart()
+  const { toast } = useToast()
   const navigate = useNavigate()
   const branchQuery = useBranch(cart.branchId)
   const branch = branchQuery.data
@@ -84,11 +86,28 @@ export function CheckoutPage() {
   const [quote, setQuote] = useState<{ cart: PricedCart; signature: string } | null>(null)
   const [placing, setPlacing] = useState(false)
   const [placed, setPlaced] = useState<CheckoutResponse | null>(null)
+  // The quote total the buyer saw when they hit "place" — if checkout itself
+  // reprices above it (a promo expired in the gap), the payment step says so.
+  const [placedQuotedTotal, setPlacedQuotedTotal] = useState<number | null>(null)
   const [payingMock, setPayingMock] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const quoteSignature = JSON.stringify({ lineInputs, fulfillment, addressId, paymentMethod })
   const priced = quote && quote.signature === quoteSignature ? quote.cart : null
+
+  // Promo honesty (plan §8): if the kitchen's quote prices the items ABOVE what
+  // the basket displayed (a promo expired between adding and reviewing), the
+  // buyer must explicitly accept the new total before the order can be placed —
+  // we never silently charge more than we showed. Acceptance is pinned to the
+  // exact quote (inputs + total); any change re-requires it.
+  const displayedSubtotalCents = cart.lines.reduce(
+    (sum, l) => sum + l.unitPriceCents * l.quantity,
+    0,
+  )
+  const [acceptedQuoteKey, setAcceptedQuoteKey] = useState<string | null>(null)
+  const repricedUp = priced !== null && priced.subtotalCents > displayedSubtotalCents
+  const quoteKey = priced ? `${quoteSignature}|${priced.totalCents}` : null
+  const needsPriceConfirm = repricedUp && acceptedQuoteKey !== quoteKey
 
   // One idempotency key per checkout attempt-set: retries resume, not duplicate.
   const idempotencyKey = useRef(newIdempotencyKey())
@@ -192,6 +211,8 @@ export function CheckoutPage() {
     if (!cart.branchId || !fulfillment) return
     setPlacing(true)
     setError(null)
+    const quotedTotal = priced?.totalCents ?? null
+    setPlacedQuotedTotal(quotedTotal)
     try {
       const response = await api.checkout(
         {
@@ -208,6 +229,15 @@ export function CheckoutPage() {
       if (response.paymentMethod === 'cash') {
         if (isMock) mockStartKitchenForCashOrder(response.orderId)
         clearCart()
+        // A cash order is committed the moment it lands; if checkout repriced
+        // above the confirmed quote in that gap, say so immediately — the
+        // buyer can still cancel until the kitchen accepts.
+        if (quotedTotal !== null && response.amountCents > quotedTotal) {
+          toast(
+            `Your total changed to ${formatCents(response.amountCents)} because an offer ended — you can cancel until the kitchen accepts.`,
+            'error',
+          )
+        }
         navigate(paths.order(response.orderId), { replace: true })
       }
     } catch (err) {
@@ -254,6 +284,20 @@ export function CheckoutPage() {
             Your order is reserved with the kitchen and confirms the moment payment goes
             through.
           </p>
+          {/* Promo honesty: checkout repriced above the quote the buyer accepted
+              (an offer ended in the gap). Nothing is charged until they pay. */}
+          {placedQuotedTotal != null && placed.amountCents > placedQuotedTotal && (
+            <p
+              role="alert"
+              className="rounded-[16px] border border-warning/40 bg-crust-tint px-4 py-3.5 text-[15px]"
+            >
+              Your total changed from{' '}
+              <s className="tabular-nums">{formatCents(placedQuotedTotal)}</s> to{' '}
+              <strong className="tabular-nums font-[750]">{formatCents(placed.amountCents)}</strong>{' '}
+              because an offer ended. Nothing is charged until you pay — only continue if
+              you're happy with the new total.
+            </p>
+          )}
           {isMock ? (
             <div className="flex flex-col gap-4 rounded-[16px] border border-border p-5">
               <Badge variant="ember-soft" className="self-start">
@@ -528,19 +572,48 @@ export function CheckoutPage() {
                 Your order, priced by the kitchen
               </h2>
               <ul className="flex flex-col gap-2">
-                {priced.lines.map((line, index) => (
-                  <li key={index} className="flex items-baseline justify-between gap-3 text-[15px]">
-                    <span>
-                      {line.quantity} × {line.name}
-                      {line.modifiers && line.modifiers.length > 0 && (
-                        <span className="block text-[13px] text-muted">
-                          {line.modifiers.map((m) => m.name).join(' · ')}
-                        </span>
-                      )}
-                    </span>
-                    <span className="tabular-nums">{formatCents(line.lineTotalCents)}</span>
-                  </li>
-                ))}
+                {priced.lines.map((line, index) => {
+                  // The basket line this priced line answers (same order as
+                  // lineInputs) — lets the summary say "was €x" when the
+                  // kitchen priced a line above what the basket displayed.
+                  const basketLine = cart.lines[index]
+                  const basketLineTotal =
+                    basketLine && basketLine.menuItemId === line.menuItemId
+                      ? basketLine.unitPriceCents * basketLine.quantity
+                      : null
+                  return (
+                    <li
+                      key={index}
+                      className="flex items-baseline justify-between gap-3 text-[15px]"
+                    >
+                      <span>
+                        {line.quantity} × {line.name}
+                        {line.modifiers && line.modifiers.length > 0 && (
+                          <span className="block text-[13px] text-muted">
+                            {line.modifiers.map((m) => m.name).join(' · ')}
+                          </span>
+                        )}
+                        {line.discountSource === 'online_promo' &&
+                          line.originalUnitPriceCents != null && (
+                            <span className="block text-[13px] text-basil">
+                              Online offer — was{' '}
+                              <s className="tabular-nums">
+                                {formatCents(line.originalUnitPriceCents * line.quantity)}
+                              </s>
+                            </span>
+                          )}
+                      </span>
+                      <span className="tabular-nums">
+                        {basketLineTotal != null && line.lineTotalCents > basketLineTotal && (
+                          <s aria-hidden className="mr-1.5 text-[13px] text-muted">
+                            {formatCents(basketLineTotal)}
+                          </s>
+                        )}
+                        {formatCents(line.lineTotalCents)}
+                      </span>
+                    </li>
+                  )
+                })}
               </ul>
               <dl className="mt-4 flex flex-col gap-1.5 border-t border-border pt-3 text-[15px]">
                 <div className="flex justify-between">
@@ -579,17 +652,44 @@ export function CheckoutPage() {
             </p>
           )}
 
-          {priced ? (
-            <Button
-              size="lg"
-              loading={placing}
-              onClick={() => void handlePlaceOrder()}
-              disabled={needsAddress && !addressId}
+          {/* Visible repricing (plan §8): the quote is ABOVE what the basket
+              displayed — say so plainly and require an explicit accept before
+              the order can be placed. Never silently charge more than shown. */}
+          {priced && repricedUp && (
+            <div
+              role="alert"
+              className="rounded-[16px] border border-warning/40 bg-crust-tint px-4 py-3.5 text-[15px]"
             >
-              {paymentMethod === 'cash'
-                ? `Place order · pay ${formatCents(priced.totalCents)} in cash`
-                : `Continue to payment · ${formatCents(priced.totalCents)}`}
-            </Button>
+              <p className="font-[650]">The kitchen's prices changed</p>
+              <p className="mt-1">
+                An online offer ended while you were ordering. Your items now come to{' '}
+                <strong className="tabular-nums font-[750]">
+                  {formatCents(priced.subtotalCents)}
+                </strong>{' '}
+                — your basket showed{' '}
+                <s className="tabular-nums">{formatCents(displayedSubtotalCents)}</s>. Accept
+                the new total below, or edit your cart.
+              </p>
+            </div>
+          )}
+
+          {priced ? (
+            needsPriceConfirm ? (
+              <Button size="lg" onClick={() => setAcceptedQuoteKey(quoteKey)}>
+                Accept new total · {formatCents(priced.totalCents)}
+              </Button>
+            ) : (
+              <Button
+                size="lg"
+                loading={placing}
+                onClick={() => void handlePlaceOrder()}
+                disabled={needsAddress && !addressId}
+              >
+                {paymentMethod === 'cash'
+                  ? `Place order · pay ${formatCents(priced.totalCents)} in cash`
+                  : `Continue to payment · ${formatCents(priced.totalCents)}`}
+              </Button>
+            )
           ) : (
             <Button
               size="lg"

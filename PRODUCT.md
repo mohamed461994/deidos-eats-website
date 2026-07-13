@@ -4,35 +4,41 @@
 
 brand + platform
 
-> Two registers, cleanly split. **Discovery and each restaurant's home / menu-browse**
-> surfaces are brand register (design IS the product — appetite and trust are built here),
-> but the brand shown is the *restaurant's*, delivered by the API. **Checkout, order
-> tracking, and account** flows switch to product register: familiar, fast, state-rich,
-> zero decoration in the way of the task. The **platform chrome** around all of it (header,
-> footer, 404, auth) is a third, quiet register: Deidos Eats frames, it never competes with
-> the restaurant it's framing.
+> Two registers, cleanly split. **The home page, discovery, and each restaurant's
+> home / menu-browse** surfaces are brand register (design IS the product — appetite and
+> trust are built here). On the home page the *platform* curates — location, banners,
+> featured items, the branch feed — but every card carries the *restaurant's* brand,
+> delivered by the API. **Checkout, order tracking, and account** flows switch to product
+> register: familiar, fast, state-rich, zero decoration in the way of the task. The
+> **platform chrome** around all of it (header, footer, 404, auth) is a third, quiet
+> register: Deidos Eats frames, it never competes with the restaurant it's framing.
 
 ## Users
 
 Hungry people in Ireland ordering from restaurants on the **Deidos Eats** marketplace — on
 the couch, on a lunch break, walking home. The marketplace launches with **two
 hand-onboarded restaurants** and is built to add more without a redesign. Users want to see
-the food, pick a restaurant and a branch, order in under two minutes, and know exactly when
-it'll be ready. Mobile-first is not a nicety; most orders happen on a phone with one thumb.
-Secondary: desktop users browsing a restaurant's menu or checking its locations/hours.
+the food, pick a branch that can actually feed them, order in under two minutes, and know
+exactly when it'll be ready. Mobile-first is not a nicety; most orders happen on a phone
+with one thumb. Secondary: desktop users browsing a restaurant's menu or checking its
+locations/hours.
 
-At N=2 there is **no search, no ratings, no cuisine filters** — discovery is a short,
-curated choice, not an infinite feed. The information architecture leaves headroom for those
-later without shipping dead marketplace chrome now.
+**Discovery is branch-first** (decided 2026-07-12): the home page leads with the branches
+near the buyer — nearest-first when they share a location, open-first when they don't —
+framed by admin-curated banners, featured items ("From the oven"), and live online
+discounts. There is still **no search, no ratings, no cuisine filters** — the platform
+curates, the buyer taps. The information architecture leaves headroom for those later
+without shipping dead marketplace chrome now.
 
 ## Product Purpose
 
 The public buyer surface of the Deidos Eats platform (existing AWS serverless API). It does
-four jobs, in order: **discover** (choose a restaurant), **browse** (appetite-forward menu
-that sells the food, per restaurant + branch), **order** (branch → cart → checkout → live
-tracking), and **locate** (a restaurant's branches, hours, collection/delivery info).
-Success = a first-time visitor picks a restaurant, completes an order without friction, and
-comes back without thinking about it.
+four jobs, in order: **discover** (pick a nearby branch from the admin-managed home — every
+card one tap from that branch's menu), **browse** (appetite-forward menu that sells the
+food, per restaurant + branch), **order** (branch → cart → checkout → live tracking), and
+**locate** (a restaurant's branches, hours, collection/delivery info). Success = a
+first-time visitor picks a branch, completes an order without friction, and comes back
+without thinking about it.
 
 **One checkout = one branch = one order** is structurally enforced by the platform. A cart
 therefore belongs to exactly **one restaurant and one branch**; switching either is an
@@ -70,22 +76,24 @@ touching component code.
   countdown urgency.
 - **Dark moody fine-dining** — black backgrounds, italic serif elegance, reservation-first
   vibes. Wrong register for casual ordering.
-- **Aggregator anonymity** — Just Eat / Deliveroo listing-grid sameness where every
-  restaurant is flattened into an identical card in an endless scroll and no restaurant has a
-  home of its own. Deidos Eats is a marketplace, but the opposite of anonymous: **each
-  restaurant gets a real home** (`/r/:slug`) that presents *its* brand, and discovery at N=2
-  is a curated, editorial choice — two considered feature cards, not a sparse grid pretending
-  to be infinite. The platform is the frame; it must never overpower the restaurant inside
-  it, and it must never reduce a restaurant to a faceless row.
+- **Aggregator anonymity** — the Just Eat / Deliveroo failure mode is not the feed itself
+  (home *is* a branch feed now — a decided product direction that supersedes the earlier
+  restaurant-first, two-feature-card discovery); it is the **flattening**, where every
+  kitchen becomes an identical, brandless row. The value we keep: **no anonymous
+  flattening.** Every branch card and featured item visibly carries its restaurant's brand
+  (name, imagery), and each restaurant keeps a real home of its own (`/r/:slug`). The
+  platform is the frame; it must never overpower the restaurant inside it, and it must
+  never reduce a restaurant to a faceless row.
 
 ## Design Principles
 
 1. **The food is the interface.** Photography leads every appetite decision; UI chrome
    frames it. A menu item is sold by its photo and name, not by a card border.
 2. **Two levels, never blurred.** Platform chrome stays quiet and consistent; restaurant
-   brand lives inside `/r/:slug` and is API-driven. On global routes (checkout, orders,
-   account) restaurant identity is derived from the **cart/order**, never from "the last
-   restaurant browsed."
+   brand lives inside `/r/:slug` and is API-driven. On the home page the platform curates
+   the shelf, but every card names and shows its restaurant. On global routes (checkout,
+   orders, account) restaurant identity is derived from the **cart/order**, never from
+   "the last restaurant browsed."
 3. **Two minutes to ordered.** Every screen between hunger and confirmation earns its place.
    Persistent cart, one-thumb reach, no dead ends, no forced signup before browsing.
 4. **One cart, one restaurant, one branch — honestly.** The cart always names its restaurant.
@@ -96,9 +104,14 @@ touching component code.
    lifecycle. Surface all of it truthfully. Loading, empty, unavailable, and error states are
    designed, never default.
 6. **Marketplace-shaped, not aggregator-shaped.** Build for restaurants #3+ slotting in
-   without a redesign — reusable `RestaurantCard`, slug-based routing — while refusing dead
-   chrome (no empty search bar, no fake infinite grid) until the feature that needs it ships.
-7. **Tokens over taste.** All visual identity flows through semantic tokens; components never
+   without a redesign — the branch feed is server-sorted and capped, cards are reusable,
+   routing is slug-based — while refusing dead chrome (no empty search bar, no placeholder
+   sections; an empty section collapses) until the feature that needs it ships.
+7. **The price shown is the price charged.** Online "was/now" promo prices come from the
+   server and expire on a server clock; the UI refreshes at the promo boundary. If a stale
+   promo reprices upward at checkout, the buyer sees the change and confirms before paying —
+   the platform never silently charges more than it displayed.
+8. **Tokens over taste.** All visual identity flows through semantic tokens; components never
    hard-code brand values. One platform theme today, swappable in one file.
 
 ## Accessibility & Inclusion

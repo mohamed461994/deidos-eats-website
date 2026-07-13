@@ -12,6 +12,7 @@ import type {
   CheckoutRequest,
   CheckoutResponse,
   DeviceRegistration,
+  MarketplaceHome,
   Menu,
   Order,
   OrderList,
@@ -25,6 +26,20 @@ import { apiRequest } from './http'
 
 export async function listRestaurants(): Promise<RestaurantList> {
   return apiRequest('/restaurants?limit=50', { auth: false })
+}
+
+/**
+ * The home-page aggregate. `lat`/`lng` are OPTIONAL and, when sent, are already
+ * rounded to ~3 decimals by the location store (the contract's privacy rule:
+ * coordinates are never logged server-side and never sent at full precision).
+ * The radius stays server-defaulted (admin-tunable content key).
+ */
+export async function getMarketplaceHome(coords?: {
+  lat: number
+  lng: number
+}): Promise<MarketplaceHome> {
+  const query = coords ? `?lat=${coords.lat}&lng=${coords.lng}` : ''
+  return apiRequest(`/marketplace/home${query}`, { auth: false })
 }
 
 /** A single restaurant by its stable id — the id-keyed source of truth. */

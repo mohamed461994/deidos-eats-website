@@ -1,16 +1,22 @@
 import {
+  keepPreviousData,
   useMutation,
   useQueries,
   useQuery,
   useQueryClient,
+  type QueryKey,
   type UseQueryResult,
 } from '@tanstack/react-query'
+import { useMemo } from 'react'
 
 import { useAuth } from '@/auth/context'
 
+import type { HomeLocation } from '@/lib/location'
+import { usePromoBoundaryRefresh } from '@/lib/use-promo-refresh'
+
 import { isApiError } from './errors'
 import { api } from './index'
-import type { Branch, Order, Restaurant, RestaurantList } from './types'
+import type { Branch, MarketplaceHome, Order, Restaurant, RestaurantList } from './types'
 
 /**
  * A 404 for a slug/id is definitive (unknown or non-published restaurant) — never
@@ -24,6 +30,10 @@ function retryExceptNotFound(failureCount: number, error: Error): boolean {
 
 export const queryKeys = {
   restaurants: ['restaurants'] as const,
+  /** Prefix for every home aggregate — invalidate this to refresh all locations. */
+  marketplaceHomeAll: ['marketplace-home'] as const,
+  marketplaceHome: (location: HomeLocation | null) =>
+    ['marketplace-home', location?.latitude ?? null, location?.longitude ?? null] as const,
   /** The id-keyed source of truth for a single restaurant (plan §6.2.1). */
   restaurant: (id: string) => ['restaurant', id] as const,
   /** Slug → restaurant resolution for `/r/:slug`; seeds `['restaurant', id]`. */
@@ -34,6 +44,51 @@ export const queryKeys = {
   order: (id: string) => ['order', id] as const,
   me: ['me'] as const,
   addresses: ['addresses'] as const,
+}
+
+/**
+ * Promo-bearing queries own their own freshness: the moment the earliest
+ * visible `promoEndsAt` passes (or a slept tab wakes past it), the query is
+ * invalidated so a "was/now" price never outlives its promo. Wired here in
+ * the data layer — every consumer of the query gets it for free.
+ */
+function usePromoBoundaryInvalidation(
+  promoEndsAts: Array<string | null | undefined>,
+  queryKey: QueryKey,
+) {
+  const queryClient = useQueryClient()
+  usePromoBoundaryRefresh(promoEndsAts, () => {
+    void queryClient.invalidateQueries({ queryKey })
+  })
+}
+
+/**
+ * The `/` aggregate: banners, merchandising strips, the server-sorted branch
+ * feed, and admin content. Keyed by the (already ~3-decimal-rounded) location
+ * so switching town/geolocation refetches, and clearing it falls back to the
+ * open-first, location-agnostic payload. `keepPreviousData` keeps the loaded
+ * page mounted while a location change refetches (re-sort in place, no
+ * skeleton flash); short staleTime because promo prices live here.
+ */
+export function useMarketplaceHome(location: HomeLocation | null): UseQueryResult<MarketplaceHome> {
+  const query = useQuery({
+    queryKey: queryKeys.marketplaceHome(location),
+    queryFn: () =>
+      api.getMarketplaceHome(
+        location ? { lat: location.latitude, lng: location.longitude } : undefined,
+      ),
+    staleTime: 60_000,
+    placeholderData: keepPreviousData,
+  })
+  const promoBoundaries = useMemo(
+    () =>
+      query.data
+        ? [...query.data.ovenItems, ...query.data.discountedItems].map((item) => item.promoEndsAt)
+        : [],
+    [query.data],
+  )
+  usePromoBoundaryInvalidation(promoBoundaries, queryKeys.marketplaceHomeAll)
+  return query
 }
 
 /** Every restaurant on the marketplace — the discovery feed. */
@@ -107,12 +162,18 @@ export function useBranchesDetails(branchIds: string[]): UseQueryResult<Branch>[
 }
 
 export function useMenu(branchId: string | null) {
-  return useQuery({
+  const query = useQuery({
     queryKey: queryKeys.menu(branchId ?? 'none'),
     queryFn: () => api.getBranchMenu(branchId!),
     enabled: branchId !== null,
     staleTime: 60_000,
   })
+  const promoBoundaries = useMemo(
+    () => (query.data?.categories ?? []).flatMap((c) => c.items.map((i) => i.promoEndsAt)),
+    [query.data],
+  )
+  usePromoBoundaryInvalidation(promoBoundaries, queryKeys.menu(branchId ?? 'none'))
+  return query
 }
 
 export function useMyOrders() {

@@ -1,6 +1,8 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { useEffect } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
+
+import { queryClient } from '@/api/query-client'
 
 import { AuthProvider } from '@/auth/context'
 import { CartProvider } from '@/cart/context'
@@ -14,6 +16,7 @@ import { AccountPage } from '@/pages/account'
 import { SignInPage, SignUpPage } from '@/pages/auth'
 import { CheckoutPage } from '@/pages/checkout'
 import { DiscoveryPage } from '@/pages/discovery'
+import { HomePage } from '@/pages/home'
 import { LocationsPage } from '@/pages/locations'
 import { MenuPage } from '@/pages/menu'
 import { NotFoundPage } from '@/pages/not-found'
@@ -21,15 +24,6 @@ import { OrdersPage } from '@/pages/orders'
 import { OrderTrackingPage } from '@/pages/order-tracking'
 import { RestaurantHomePage } from '@/pages/restaurant'
 import { RestaurantLayout } from '@/pages/restaurant-layout'
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      retry: 1,
-      refetchOnWindowFocus: false,
-    },
-  },
-})
 
 function ScrollToTop() {
   const { pathname } = useLocation()
@@ -58,8 +52,11 @@ export default function App() {
                 <CartRestoreBanner />
                 <div id="main" className="flex-1">
                   <Routes>
-                    {/* Discovery — the marketplace front door. */}
-                    <Route path="/" element={<DiscoveryPage />} />
+                    {/* Home — the branch-first marketplace front door. */}
+                    <Route path="/" element={<HomePage />} />
+
+                    {/* The retained restaurant-card page (not linked from home). */}
+                    <Route path="/restaurants" element={<DiscoveryPage />} />
 
                     {/* A restaurant's own space; branch lives IN the menu URL. */}
                     <Route path="/r/:slug" element={<RestaurantLayout />}>

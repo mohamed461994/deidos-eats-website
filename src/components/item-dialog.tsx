@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react'
 
 import type { MenuItem, ModifierGroup, ModifierOption } from '@/api/types'
-import type { CartRestaurant } from '@/cart/cart'
+import { effectiveUnitPriceCents, type CartRestaurant } from '@/cart/cart'
 import { useCart } from '@/cart/context'
 import { FoodImage } from '@/components/food-image'
+import { PriceWasNow } from '@/components/price-was-now'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/dialog'
@@ -55,8 +56,7 @@ export function ItemDialog({ item, restaurant, branchId, branchName, onClose }: 
   if (!item) return null
 
   const selectedOptions = options.filter((o) => selected.has(o.id))
-  const unitPrice =
-    item.priceCents + selectedOptions.reduce((sum, o) => sum + o.priceDeltaCents, 0)
+  const unitPrice = effectiveUnitPriceCents(item, selectedOptions)
 
   function countIn(group: ModifierGroup): number {
     return group.options.filter((o) => selected.has(o.id)).length
@@ -135,7 +135,16 @@ export function ItemDialog({ item, restaurant, branchId, branchName, onClose }: 
           <div>
             <h2 className="display text-2xl">{item.name}</h2>
             {item.description && <p className="mt-1.5 text-[15px] text-muted">{item.description}</p>}
-            <p className="tabular-nums mt-2 text-lg font-[750]">{formatCents(item.priceCents)}</p>
+            {item.onlinePromoPriceCents != null ? (
+              <PriceWasNow
+                baseCents={item.priceCents}
+                promoCents={item.onlinePromoPriceCents}
+                showSaving
+                className="mt-2 text-lg"
+              />
+            ) : (
+              <p className="tabular-nums mt-2 text-lg font-[750]">{formatCents(item.priceCents)}</p>
+            )}
           </div>
 
           {item.allergens.length > 0 && (

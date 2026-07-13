@@ -42,5 +42,11 @@ export type AddressList = Schemas['AddressList']
 export type DeviceRegistration = Schemas['DeviceRegistration']
 export type Device = Schemas['Device']
 
+export type MarketplaceHome = Schemas['MarketplaceHome']
+export type MarketplaceBanner = Schemas['MarketplaceBanner']
+export type MarketplaceItem = Schemas['MarketplaceItem']
+export type MarketplaceBranch = Schemas['MarketplaceBranch']
+export type MarketplaceContent = Schemas['MarketplaceContent']
+
 export type ApiErrorBody = Schemas['Error']
 export type OrderChangedMessage = Schemas['OrderChangedMessage']

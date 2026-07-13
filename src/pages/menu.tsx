@@ -1,13 +1,15 @@
 import { MapPin } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
 
 import type { MenuItem } from '@/api/types'
 import { errorMessage } from '@/api'
-import { useMenu } from '@/api/queries'
+import { queryKeys, useMenu } from '@/api/queries'
 import { BranchPickerDialog } from '@/components/branch-picker'
 import { FoodImage } from '@/components/food-image'
 import { ItemDialog } from '@/components/item-dialog'
+import { PriceWasNow } from '@/components/price-was-now'
 import { EmptyState, ErrorState } from '@/components/states'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -16,6 +18,7 @@ import { useCart } from '@/cart/context'
 import { useRememberedBranch } from '@/lib/branch-selection'
 import { formatCents } from '@/lib/money'
 import { paths } from '@/lib/routes'
+import { usePromoBoundaryRefresh } from '@/lib/use-promo-refresh'
 import { cn } from '@/lib/utils'
 
 import { useRestaurantRoute } from './restaurant-layout'
@@ -42,6 +45,21 @@ export function MenuPage() {
   const [activeItem, setActiveItem] = useState<MenuItem | null>(null)
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
   const sectionsRef = useRef<Map<string, HTMLElement>>(new Map())
+  const queryClient = useQueryClient()
+
+  // Refetch this menu (and the home strips) the moment a visible promo ends —
+  // a "was/now" price never outlives its promo, even after a sleeping tab.
+  const promoBoundaries = useMemo(
+    () => (menu?.categories ?? []).flatMap((c) => c.items.map((i) => i.promoEndsAt)),
+    [menu],
+  )
+  const menuBranchId = branch?.id ?? null
+  usePromoBoundaryRefresh(promoBoundaries, () => {
+    if (menuBranchId) {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.menu(menuBranchId) })
+    }
+    void queryClient.invalidateQueries({ queryKey: queryKeys.marketplaceHomeAll })
+  })
 
   // Remember this branch for the restaurant so returning to `/r/:slug` preselects it.
   useEffect(() => {
@@ -224,7 +242,11 @@ export function MenuPage() {
                       onClick={() => item.isAvailable && setActiveItem(item)}
                       disabled={!item.isAvailable}
                       className="group w-full text-left disabled:cursor-not-allowed"
-                      aria-label={`${item.name}, ${formatCents(item.priceCents)}${item.isAvailable ? '' : ', sold out'}`}
+                      aria-label={`${item.name}, ${
+                        item.onlinePromoPriceCents != null
+                          ? `now ${formatCents(item.onlinePromoPriceCents)}, was ${formatCents(item.priceCents)}`
+                          : formatCents(item.priceCents)
+                      }${item.isAvailable ? '' : ', sold out'}`}
                     >
                       <div className="relative overflow-hidden rounded-[16px]">
                         <FoodImage
@@ -245,9 +267,17 @@ export function MenuPage() {
                       </div>
                       <div className="mt-3 flex items-baseline justify-between gap-3">
                         <h3 className="font-[650]">{item.name}</h3>
-                        <p className="tabular-nums shrink-0 text-muted">
-                          {formatCents(item.priceCents)}
-                        </p>
+                        {item.onlinePromoPriceCents != null ? (
+                          <PriceWasNow
+                            baseCents={item.priceCents}
+                            promoCents={item.onlinePromoPriceCents}
+                            className="shrink-0 justify-end"
+                          />
+                        ) : (
+                          <p className="tabular-nums shrink-0 text-muted">
+                            {formatCents(item.priceCents)}
+                          </p>
+                        )}
                       </div>
                       {item.description && (
                         <p className="mt-1 line-clamp-2 text-[15px] text-muted">{item.description}</p>

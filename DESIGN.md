@@ -91,8 +91,10 @@ Purposeful, warm, quick. Easing `cubic-bezier(0.22, 1, 0.36, 1)` (ease-out-quint
 everywhere; durations 150–250ms in task flows, up to 600ms for a single orchestrated hero
 reveal. Signature moves:
 
-- **Discovery / restaurant hero**: one page-load choreography (headline rise + photo
-  scale-settle). Content visible by default; motion enhances, never gates.
+- **Home / restaurant hero**: one page-load choreography (headline rise + photo
+  scale-settle; on home the hero copy and location control rise in sequence, and strip/feed
+  cards stagger ≤40 ms with a capped index). Content visible by default; motion enhances,
+  never gates.
 - **Add-to-cart**: item photo arcs toward the cart pill; cart count bumps. The product's one
   indulgence — it confirms state.
 - **Order tracking**: status steps advance with a draw-line + ember pulse on the active step.
@@ -105,10 +107,16 @@ parallax, no bounce, no scroll-jacking.
 ## Components
 
 shadcn/ui (Radix) primitives restyled through tokens — same stack as the dashboard. Core
-vocabulary: pill Button (primary basil / ghost / destructive), **RestaurantCard** (the reusable
-discovery + cross-surface restaurant tile: hero, name, tagline, precise availability badge —
-e.g. "1 of 2 locations open" — links to `/r/:slug`), BranchChooser/BranchPickerDialog, Sheet
-(cart on mobile), Dialog (item detail on desktop, full-screen sheet on mobile), Tabs (menu
+vocabulary: pill Button (primary basil / ghost / destructive), **RestaurantCard** (the
+restaurant tile: hero, name, tagline, precise availability badge — e.g. "1 of 2 locations
+open" — links to `/r/:slug`; lives on `/restaurants` and cross-surface uses),
+**BranchCard** (the home feed unit: restaurant brand + branch name/town, open state,
+collection/delivery badges, distance when located — the whole card is one link to that
+branch's menu), **item strip cards** (From-the-oven / Discounted: photo-led, restaurant
+attribution, price or ~~was~~/now, straight to the branch menu), **LocationControl**
+(geolocate + town pick, header-level), **PriceWasNow** (struck base + emphasized promo
+price, shared by strips and menu), BranchChooser/BranchPickerDialog, Sheet (cart on
+mobile), Dialog (item detail on desktop, full-screen sheet on mobile), Tabs (menu
 categories, sticky under header), Badge (availability + status), Stepper (order tracking),
 Skeleton loaders (photo-shaped, never spinners mid-content), Toast (bottom, above cart bar).
 Every interactive component ships default / hover / focus-visible / active / disabled / loading
@@ -121,10 +129,17 @@ Mobile-first, one-thumb reach: persistent bottom cart bar on mobile (sticky, saf
 **always names the cart's restaurant**), max content width 1200px desktop, menu grid
 `repeat(auto-fit, minmax(280px, 1fr))`.
 
-- **Discovery (`/`)** — editorial, not sparse-grid. At N=2: a "Choose a restaurant" heading,
-  fulfillment/location context near the top, **two large balanced feature cards**, and
-  restrained "more restaurants coming soon" copy. No empty search bar, no dead filters — the
-  layout merely leaves headroom for Phase 3 additions.
+- **Home (`/`)** — the admin-managed, **branch-first** market hall (supersedes the earlier
+  two-feature-card restaurant discovery, which lives on at `/restaurants`, unlinked). Top to
+  bottom: hero copy + the **location control** (geolocation or a town pick — sorting aid,
+  never a gate), admin **banners**, a **"From the oven"** item strip, a **"Discounted"**
+  strip (server-priced ~~was~~/now), then the **branch feed** — every published restaurant's
+  branches, server-sorted nearest-first when located (with "x.x km") or open-first when not.
+  Every card carries its restaurant's brand and is one whole-card tap to
+  `/r/:slug/b/:branchId/menu`. Empty sections collapse — no placeholder junk. Store badges
+  render only when their URLs are set.
+- **`/restaurants`** — the retained restaurant-card page (editorial grid of
+  `RestaurantCard`s). Kept working for direct links; not linked from home.
 - **Restaurant home (`/r/:slug`)** — the restaurant's own space: API-driven hero (name,
   tagline, hero image), branch cards ("Locations in …", not "towns served"), and clear order
   CTAs into `/r/:slug/b/:branchId/menu`. Availability is stated precisely and near the top.
