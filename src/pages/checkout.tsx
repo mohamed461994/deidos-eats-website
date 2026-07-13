@@ -7,6 +7,7 @@ import { mockConfirmCardPayment, mockStartKitchenForCashOrder } from '@/api/mock
 import { useAddresses, useBranch, useBranchesDetails, useRestaurant } from '@/api/queries'
 import type { Branch, CheckoutResponse, FulfillmentType, PricedCart } from '@/api/types'
 import { useAuth } from '@/auth/context'
+import { compareQuoteToBasket } from '@/cart/cart'
 import { useCart } from '@/cart/context'
 import { AddressForm } from '@/components/address-form'
 import { BranchPickerDialog } from '@/components/branch-picker'
@@ -34,7 +35,7 @@ type PaymentMethod = 'card' | 'cash'
 
 export function CheckoutPage() {
   const { status } = useAuth()
-  const { cart, lineInputs, clearCart, itemCount } = useCart()
+  const { cart, lineInputs, subtotalCents, clearCart, itemCount } = useCart()
   const { toast } = useToast()
   const navigate = useNavigate()
   const branchQuery = useBranch(cart.branchId)
@@ -100,12 +101,9 @@ export function CheckoutPage() {
   // buyer must explicitly accept the new total before the order can be placed —
   // we never silently charge more than we showed. Acceptance is pinned to the
   // exact quote (inputs + total); any change re-requires it.
-  const displayedSubtotalCents = cart.lines.reduce(
-    (sum, l) => sum + l.unitPriceCents * l.quantity,
-    0,
-  )
   const [acceptedQuoteKey, setAcceptedQuoteKey] = useState<string | null>(null)
-  const repricedUp = priced !== null && priced.subtotalCents > displayedSubtotalCents
+  const quoteComparison = priced ? compareQuoteToBasket(cart, priced) : null
+  const repricedUp = quoteComparison?.repricedUp ?? false
   const quoteKey = priced ? `${quoteSignature}|${priced.totalCents}` : null
   const needsPriceConfirm = repricedUp && acceptedQuoteKey !== quoteKey
 
@@ -573,14 +571,10 @@ export function CheckoutPage() {
               </h2>
               <ul className="flex flex-col gap-2">
                 {priced.lines.map((line, index) => {
-                  // The basket line this priced line answers (same order as
-                  // lineInputs) — lets the summary say "was €x" when the
-                  // kitchen priced a line above what the basket displayed.
-                  const basketLine = cart.lines[index]
-                  const basketLineTotal =
-                    basketLine && basketLine.menuItemId === line.menuItemId
-                      ? basketLine.unitPriceCents * basketLine.quantity
-                      : null
+                  // The basket line total this priced line answers — lets the
+                  // summary say "was €x" when the kitchen priced a line above
+                  // what the basket displayed.
+                  const basketLineTotal = quoteComparison?.basketLineTotals[index] ?? null
                   return (
                     <li
                       key={index}
@@ -667,8 +661,8 @@ export function CheckoutPage() {
                   {formatCents(priced.subtotalCents)}
                 </strong>{' '}
                 — your basket showed{' '}
-                <s className="tabular-nums">{formatCents(displayedSubtotalCents)}</s>. Accept
-                the new total below, or edit your cart.
+                <s className="tabular-nums">{formatCents(subtotalCents)}</s>. Accept the new
+                total below, or edit your cart.
               </p>
             </div>
           )}

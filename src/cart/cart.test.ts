@@ -7,6 +7,7 @@ import {
   cartItemCount,
   cartReducer,
   cartSubtotalCents,
+  compareQuoteToBasket,
   emptyCart,
   toCartLineInputs,
   type CartState,
@@ -136,5 +137,45 @@ describe('cartReducer', () => {
     expect(buildLine(onOffer, [], 1).unitPriceCents).toBe(950)
     // No active promo (null or absent) → base price, unchanged behavior.
     expect(buildLine({ ...pizza, onlinePromoPriceCents: null }, [], 1).unitPriceCents).toBe(1150)
+  })
+})
+
+describe('compareQuoteToBasket', () => {
+  const basket = add(emptyCart, pizza, [], 2) // displayed at 1150 × 2 = 2300
+
+  const quoteLine = (unitPriceCents: number, menuItemId = 'item-1') => ({
+    menuItemId,
+    name: 'Margherita',
+    quantity: 2,
+    unitPriceCents,
+    lineTotalCents: unitPriceCents * 2,
+    vatRateBasisPoints: 1350,
+  })
+
+  it('flags an upward reprice and pairs each priced line with its basket total', () => {
+    const result = compareQuoteToBasket(basket, {
+      subtotalCents: 2900,
+      lines: [quoteLine(1450)],
+    })
+    expect(result.repricedUp).toBe(true)
+    expect(result.displayedSubtotalCents).toBe(2300)
+    expect(result.basketLineTotals).toEqual([2300])
+  })
+
+  it('does not flag an equal or cheaper quote (charging less than shown is fine)', () => {
+    expect(
+      compareQuoteToBasket(basket, { subtotalCents: 2300, lines: [quoteLine(1150)] }).repricedUp,
+    ).toBe(false)
+    expect(
+      compareQuoteToBasket(basket, { subtotalCents: 1900, lines: [quoteLine(950)] }).repricedUp,
+    ).toBe(false)
+  })
+
+  it('returns null for a priced line it cannot pair with the basket', () => {
+    const result = compareQuoteToBasket(basket, {
+      subtotalCents: 2900,
+      lines: [quoteLine(1450, 'other-item')],
+    })
+    expect(result.basketLineTotals).toEqual([null])
   })
 })

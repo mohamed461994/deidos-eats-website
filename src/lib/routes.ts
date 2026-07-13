@@ -7,8 +7,6 @@
 export const paths = {
   /** The marketplace front door — the branch-first home page. */
   discovery: () => '/',
-  /** The retained restaurant-card page; kept working, not linked from home. */
-  restaurants: () => '/restaurants',
   restaurant: (slug: string) => `/r/${slug}`,
   restaurantMenu: (slug: string, branchId: string) => `/r/${slug}/b/${branchId}/menu`,
   restaurantLocations: (slug: string) => `/r/${slug}/locations`,

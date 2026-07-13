@@ -41,7 +41,7 @@ export function RestaurantCard({ restaurant }: { restaurant: Restaurant }) {
           src={restaurant.heroImageUrl ?? null}
           alt={restaurant.heroImageAlt ?? ''}
           fallbackLabel={restaurant.name}
-          className="aspect-[16/10] w-full transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-[1.03] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
+          className="aspect-[16/10] w-full transition-transform duration-500 ease-(--ease-out) group-hover:scale-[1.03] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
         />
         <div className="absolute top-4 left-4">
           <Badge variant={badge.variant} className="shadow-raised">

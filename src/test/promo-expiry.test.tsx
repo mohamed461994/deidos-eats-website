@@ -9,21 +9,10 @@ import { act, cleanup, render, renderHook, screen } from '@testing-library/react
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import App from '@/App'
-import { DUBLIN_BRANCH_ID, resetMarketplaceForTests } from '@/api/mock/data'
+import { resetMockApiForTests } from '@/api/mock/api'
+import { DUBLIN_BRANCH_ID } from '@/api/mock/data'
 import { queryClient } from '@/api/query-client'
 import { usePromoBoundaryRefresh } from '@/lib/use-promo-refresh'
-
-class IO {
-  observe() {}
-  unobserve() {}
-  disconnect() {}
-  takeRecords() {
-    return []
-  }
-}
-vi.stubGlobal('IntersectionObserver', IO)
-window.scrollTo = () => {}
-Element.prototype.scrollIntoView = () => {}
 
 const TWO_HOURS_MS = 2 * 60 * 60 * 1000
 
@@ -44,7 +33,7 @@ beforeEach(() => {
   queryClient.clear()
   // Promo fixtures anchor to the (faked) clock: the Dublin house special ends
   // in 2 h, the Galway caesar promo has no scheduled end.
-  resetMarketplaceForTests()
+  resetMockApiForTests()
 })
 
 afterEach(() => {

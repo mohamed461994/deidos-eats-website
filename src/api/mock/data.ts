@@ -545,3 +545,18 @@ export function activePromoFor(itemId: string, nowMs: number): MockPromo | null 
   if (promo.endsAtMs !== null && nowMs >= promo.endsAtMs) return null
   return promo
 }
+
+/**
+ * The public promo projection (the server's menu mapper rule): the pair of
+ * fields exists ONLY while a promo is active at `nowMs`, else both are null.
+ */
+export function promoFieldsFor(
+  itemId: string,
+  nowMs: number,
+): { onlinePromoPriceCents: number | null; promoEndsAt: string | null } {
+  const promo = activePromoFor(itemId, nowMs)
+  return {
+    onlinePromoPriceCents: promo ? promo.promoPriceCents : null,
+    promoEndsAt: promo && promo.endsAtMs !== null ? new Date(promo.endsAtMs).toISOString() : null,
+  }
+}

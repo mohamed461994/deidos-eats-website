@@ -22,6 +22,7 @@ import { Modal } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatKm, haversineKm } from '@/lib/distance'
 import { formatCents } from '@/lib/money'
+import { useGeolocate } from '@/lib/use-geolocate'
 import { cn } from '@/lib/utils'
 
 type Coords = { latitude: number; longitude: number }
@@ -37,8 +38,7 @@ interface BranchChooserProps {
 export function BranchChooser({ branches, selectedId, onSelect }: BranchChooserProps) {
   const details = useBranchesDetails(branches.map((b) => b.id))
   const [coords, setCoords] = useState<Coords | null>(null)
-  const [locating, setLocating] = useState(false)
-  const [geoNote, setGeoNote] = useState<string | null>(null)
+  const { locate, locating, geoNote } = useGeolocate()
 
   // Pair each summary with its detail query and (once we know where the user is)
   // its distance. Distance needs the branch's coordinates, which live on the
@@ -70,27 +70,12 @@ export function BranchChooser({ branches, selectedId, onSelect }: BranchChooserP
     coords != null && ordered[0]?.distanceKm != null ? ordered[0].summary.id : null
 
   function requestLocation() {
-    if (typeof navigator === 'undefined' || !navigator.geolocation) {
-      setGeoNote("Location isn't available on this device — just pick a branch below.")
-      return
-    }
-    setLocating(true)
-    setGeoNote(null)
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        // Never logged or persisted — used only to sort this list in memory.
-        setCoords({
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-        })
-        setLocating(false)
-      },
-      () => {
-        setLocating(false)
-        setGeoNote("Couldn't get your location — no worries, pick a branch below.")
-      },
-      { enableHighAccuracy: false, timeout: 10_000, maximumAge: 300_000 },
-    )
+    locate({
+      // Never logged or persisted — used only to sort this list in memory.
+      onFix: setCoords,
+      unavailableMessage: "Location isn't available on this device — just pick a branch below.",
+      failedMessage: "Couldn't get your location — no worries, pick a branch below.",
+    })
   }
 
   return (

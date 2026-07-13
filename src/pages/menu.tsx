@@ -1,11 +1,10 @@
 import { MapPin } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useEffect, useRef, useState } from 'react'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
 
 import type { MenuItem } from '@/api/types'
 import { errorMessage } from '@/api'
-import { queryKeys, useMenu } from '@/api/queries'
+import { useMenu } from '@/api/queries'
 import { BranchPickerDialog } from '@/components/branch-picker'
 import { FoodImage } from '@/components/food-image'
 import { ItemDialog } from '@/components/item-dialog'
@@ -18,7 +17,6 @@ import { useCart } from '@/cart/context'
 import { useRememberedBranch } from '@/lib/branch-selection'
 import { formatCents } from '@/lib/money'
 import { paths } from '@/lib/routes'
-import { usePromoBoundaryRefresh } from '@/lib/use-promo-refresh'
 import { cn } from '@/lib/utils'
 
 import { useRestaurantRoute } from './restaurant-layout'
@@ -45,21 +43,6 @@ export function MenuPage() {
   const [activeItem, setActiveItem] = useState<MenuItem | null>(null)
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
   const sectionsRef = useRef<Map<string, HTMLElement>>(new Map())
-  const queryClient = useQueryClient()
-
-  // Refetch this menu (and the home strips) the moment a visible promo ends —
-  // a "was/now" price never outlives its promo, even after a sleeping tab.
-  const promoBoundaries = useMemo(
-    () => (menu?.categories ?? []).flatMap((c) => c.items.map((i) => i.promoEndsAt)),
-    [menu],
-  )
-  const menuBranchId = branch?.id ?? null
-  usePromoBoundaryRefresh(promoBoundaries, () => {
-    if (menuBranchId) {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.menu(menuBranchId) })
-    }
-    void queryClient.invalidateQueries({ queryKey: queryKeys.marketplaceHomeAll })
-  })
 
   // Remember this branch for the restaurant so returning to `/r/:slug` preselects it.
   useEffect(() => {
@@ -254,7 +237,7 @@ export function MenuPage() {
                           alt=""
                           fallbackLabel={item.name}
                           className={cn(
-                            'aspect-[4/3] w-full transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]',
+                            'aspect-[4/3] w-full transition-transform duration-500 ease-(--ease-out)',
                             item.isAvailable && 'group-hover:scale-[1.04]',
                             !item.isAvailable && 'opacity-50 saturate-50',
                           )}

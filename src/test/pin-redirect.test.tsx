@@ -9,17 +9,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { RESTAURANT_A_ID } from '@/api/mock/data'
 
-class IO {
-  observe() {}
-  unobserve() {}
-  disconnect() {}
-  takeRecords() {
-    return []
-  }
-}
-vi.stubGlobal('IntersectionObserver', IO)
-window.scrollTo = () => {}
-
 beforeEach(() => {
   localStorage.clear()
   vi.resetModules()

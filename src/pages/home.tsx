@@ -8,12 +8,10 @@
  * from a branch menu.
  */
 import { useMemo } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
 import { Navigate } from 'react-router-dom'
 
 import { errorMessage } from '@/api'
-import { queryKeys, useMarketplaceHome, useRestaurants } from '@/api/queries'
-import type { MarketplaceBranch, Restaurant } from '@/api/types'
+import { useMarketplaceHome, useRestaurants } from '@/api/queries'
 import { BranchCard, type BranchBrand } from '@/components/home/branch-card'
 import { BannerStrip } from '@/components/home/banner-strip'
 import { ItemStrip } from '@/components/home/item-strip'
@@ -21,64 +19,51 @@ import { LocationControl } from '@/components/home/location-control'
 import { StoreBadges } from '@/components/home/store-badges'
 import { EmptyState, ErrorState } from '@/components/states'
 import { Skeleton } from '@/components/ui/skeleton'
-import { config } from '@/config'
 import { townOptions, useHomeLocation } from '@/lib/location'
+import { pinnedRestaurantOf } from '@/lib/restaurant'
 import { paths } from '@/lib/routes'
-import { usePromoBoundaryRefresh } from '@/lib/use-promo-refresh'
-
-const FEED_STAGGER_STEP_MS = 40
-const FEED_MAX_STAGGER_INDEX = 5
+import { staggerDelayMs } from '@/lib/utils'
 
 export function HomePage() {
   const location = useHomeLocation()
   const homeQuery = useMarketplaceHome(location)
   const restaurantsQuery = useRestaurants()
   const restaurants = restaurantsQuery.data?.items
-  const queryClient = useQueryClient()
 
   const home = homeQuery.data
   const located = location !== null
 
-  // Refetch the moment the earliest visible promo ends (and after a sleeping
-  // tab wakes) so a "was/now" price never outlives its promo.
-  const promoBoundaries = useMemo(
-    () =>
-      [...(home?.ovenItems ?? []), ...(home?.discountedItems ?? [])].map(
-        (item) => item.promoEndsAt,
-      ),
-    [home],
-  )
-  usePromoBoundaryRefresh(promoBoundaries, () => {
-    void queryClient.invalidateQueries({ queryKey: queryKeys.marketplaceHomeAll })
-  })
-
-  // Restaurant branding joined onto branch cards (logo, imagery, precise status).
-  const brandBySlug = useMemo(() => {
-    const map = new Map<string, { restaurant: Restaurant; branchImages: Map<string, string | null> }>()
+  // Restaurant branding joined onto branch cards (logo, imagery, precise
+  // status), precomputed per branch so memoized cards get stable props.
+  const brandByBranchId = useMemo(() => {
+    const map = new Map<string, BranchBrand>()
     for (const restaurant of restaurants ?? []) {
-      map.set(restaurant.slug, {
-        restaurant,
-        branchImages: new Map(restaurant.branches.map((b) => [b.id, b.imageUrl ?? null])),
-      })
+      for (const branch of restaurant.branches) {
+        map.set(branch.id, {
+          logoUrl: restaurant.logoUrl ?? null,
+          imageUrl: branch.imageUrl ?? restaurant.heroImageUrl ?? null,
+          marketplaceStatus: restaurant.marketplaceStatus,
+        })
+      }
     }
     return map
   }, [restaurants])
 
-  function brandFor(branch: MarketplaceBranch): BranchBrand | undefined {
-    const entry = brandBySlug.get(branch.restaurantSlug)
-    if (!entry) return undefined
-    return {
-      logoUrl: entry.restaurant.logoUrl ?? null,
-      imageUrl: entry.branchImages.get(branch.id) ?? entry.restaurant.heroImageUrl ?? null,
-      marketplaceStatus: entry.restaurant.marketplaceStatus,
-    }
-  }
+  // Town picker options: the feed carries every published branch with coords
+  // today; the restaurants query is merged in so the list stays complete even
+  // if the feed is ever capped (it self-heals as BranchSummary coords ship).
+  const towns = useMemo(
+    () =>
+      townOptions([
+        ...(home?.branches.items ?? []),
+        ...(restaurants ?? []).flatMap((r) => r.branches),
+      ]),
+    [home, restaurants],
+  )
 
   // Rollback pin: behave as a single-restaurant site when a restaurant is pinned.
-  if (config.restaurantId) {
-    const pinned = restaurants?.find((r) => r.id === config.restaurantId)
-    if (pinned) return <Navigate to={paths.restaurant(pinned.slug)} replace />
-  }
+  const pinned = pinnedRestaurantOf(restaurants)
+  if (pinned) return <Navigate to={paths.restaurant(pinned.slug)} replace />
 
   const content = home?.content
   const heroHeading = content?.heroHeading ?? 'Hungry? You’re in the right place.'
@@ -89,9 +74,6 @@ export function HomePage() {
   const discountedTitle = content?.discountedSectionTitle ?? 'On offer'
   const branchesTitle =
     content?.branchesSectionTitle ?? (located ? 'Kitchens near you' : 'Every kitchen')
-
-  const feed = home?.branches
-  const zeroRestaurants = home !== undefined && feed !== undefined && feed.items.length === 0
 
   return (
     <main>
@@ -108,7 +90,7 @@ export function HomePage() {
             {heroSubheading}
           </p>
           <div className="rise-in-late mt-7">
-            <LocationControl location={location} towns={townOptions(home?.branches.items)} />
+            <LocationControl location={location} towns={towns} />
           </div>
         </div>
       </section>
@@ -121,7 +103,7 @@ export function HomePage() {
           />
         ) : !home ? (
           <HomeSkeleton />
-        ) : zeroRestaurants ? (
+        ) : home.branches.items.length === 0 ? (
           <>
             <BannerStrip banners={home.banners} />
             <EmptyState
@@ -158,22 +140,20 @@ export function HomePage() {
                   : 'Open kitchens first — set a location to sort by distance.'}
               </p>
               <ul className="mt-5 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                {feed!.items.map((branch, index) => (
+                {home.branches.items.map((branch, index) => (
                   <li
                     key={branch.id}
                     className="rise-in flex"
-                    style={{
-                      animationDelay: `${Math.min(index, FEED_MAX_STAGGER_INDEX) * FEED_STAGGER_STEP_MS}ms`,
-                    }}
+                    style={{ animationDelay: staggerDelayMs(index) }}
                   >
-                    <BranchCard branch={branch} brand={brandFor(branch)} />
+                    <BranchCard branch={branch} brand={brandByBranchId.get(branch.id)} />
                   </li>
                 ))}
               </ul>
-              {feed!.total > feed!.items.length && (
+              {home.branches.total > home.branches.items.length && (
                 <p className="mt-6 text-center text-[15px] text-muted">
-                  And {feed!.total - feed!.items.length} more — set a location to bring the
-                  closest to the top.
+                  And {home.branches.total - home.branches.items.length} more — set a location
+                  to bring the closest to the top.
                 </p>
               )}
             </section>

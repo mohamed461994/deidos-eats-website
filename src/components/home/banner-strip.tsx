@@ -55,7 +55,7 @@ function BannerCard({ banner, solo }: { banner: MarketplaceBanner; solo: boolean
             src={banner.imageUrl}
             alt=""
             loading="lazy"
-            className="aspect-[5/2] w-full bg-surface object-cover transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-[1.02] motion-reduce:transition-none sm:aspect-[3/1]"
+            className="aspect-[5/2] w-full bg-surface object-cover transition-transform duration-500 ease-(--ease-out) group-hover:scale-[1.02] motion-reduce:transition-none sm:aspect-[3/1]"
           />
           {/* Scrim so paper text holds ≥4.5:1 on any photo. */}
           <div

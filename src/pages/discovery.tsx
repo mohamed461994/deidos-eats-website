@@ -6,7 +6,7 @@ import { useRestaurants } from '@/api/queries'
 import { RestaurantCard } from '@/components/restaurant-card'
 import { EmptyState, ErrorState } from '@/components/states'
 import { Skeleton } from '@/components/ui/skeleton'
-import { config } from '@/config'
+import { pinnedRestaurantOf } from '@/lib/restaurant'
 import { paths } from '@/lib/routes'
 
 /**
@@ -22,10 +22,8 @@ export function DiscoveryPage() {
   const restaurants = data?.items ?? []
 
   // Rollback pin: behave as a single-restaurant site when a restaurant is pinned.
-  if (config.restaurantId) {
-    const pinned = restaurants.find((r) => r.id === config.restaurantId)
-    if (pinned) return <Navigate to={paths.restaurant(pinned.slug)} replace />
-  }
+  const pinned = pinnedRestaurantOf(restaurants)
+  if (pinned) return <Navigate to={paths.restaurant(pinned.slug)} replace />
 
   return (
     <main className="mx-auto max-w-6xl px-4 pb-24 sm:px-6">

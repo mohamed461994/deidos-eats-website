@@ -6,7 +6,7 @@
  * from live branch data. Cleared in one tap; browsing never depends on it.
  */
 import { LocateFixed, MapPin, X } from 'lucide-react'
-import { useId, useState } from 'react'
+import { useId } from 'react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -16,6 +16,7 @@ import {
   type HomeLocation,
   type TownOption,
 } from '@/lib/location'
+import { useGeolocate } from '@/lib/use-geolocate'
 
 interface LocationControlProps {
   location: HomeLocation | null
@@ -23,39 +24,28 @@ interface LocationControlProps {
 }
 
 export function LocationControl({ location, towns }: LocationControlProps) {
-  const [locating, setLocating] = useState(false)
-  const [geoNote, setGeoNote] = useState<string | null>(null)
+  const { locate, locating, geoNote, clearGeoNote } = useGeolocate()
   const selectId = useId()
 
   function requestLocation() {
-    if (typeof navigator === 'undefined' || !navigator.geolocation) {
-      setGeoNote("Location isn't available on this device — pick a town, or just browse.")
-      return
-    }
-    setLocating(true)
-    setGeoNote(null)
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setLocating(false)
+    locate({
+      onFix: (coords) => {
         // Rounded BEFORE leaving this callback: the precise fix is never kept.
         setHomeLocation({
           kind: 'coords',
-          latitude: roundCoordinate(position.coords.latitude),
-          longitude: roundCoordinate(position.coords.longitude),
+          latitude: roundCoordinate(coords.latitude),
+          longitude: roundCoordinate(coords.longitude),
         })
       },
-      () => {
-        setLocating(false)
-        setGeoNote("We couldn't get your location — pick a town, or just browse.")
-      },
-      { enableHighAccuracy: false, timeout: 10_000, maximumAge: 300_000 },
-    )
+      unavailableMessage: "Location isn't available on this device — pick a town, or just browse.",
+      failedMessage: "We couldn't get your location — pick a town, or just browse.",
+    })
   }
 
   function pickTown(townName: string) {
     const town = towns.find((t) => t.town === townName)
     if (!town) return
-    setGeoNote(null)
+    clearGeoNote()
     setHomeLocation({
       kind: 'town',
       town: town.town,
@@ -66,8 +56,8 @@ export function LocationControl({ location, towns }: LocationControlProps) {
 
   return (
     <div className="flex flex-col gap-2">
-      {location ? (
-        <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
+        {location ? (
           <p className="flex items-center gap-2 rounded-full bg-paper/12 px-4 py-2 text-[15px] font-[550] text-paper">
             <MapPin className="size-4 shrink-0" aria-hidden />
             {location.kind === 'town' ? `Near ${location.town}` : 'Near you'}
@@ -81,37 +71,37 @@ export function LocationControl({ location, towns }: LocationControlProps) {
               <X className="size-4" aria-hidden />
             </button>
           </p>
-        </div>
-      ) : (
-        <div className="flex flex-wrap items-center gap-3">
-          <Button variant="paper" size="sm" loading={locating} onClick={requestLocation}>
-            <LocateFixed className="size-4" aria-hidden />
-            Use my location
-          </Button>
-          {towns.length > 0 && (
-            <>
-              <label htmlFor={selectId} className="text-[15px] text-paper-muted">
-                or pick a town
-              </label>
-              <select
-                id={selectId}
-                value=""
-                onChange={(e) => pickTown(e.target.value)}
-                className="h-9 rounded-full border border-paper/30 bg-transparent px-4 text-sm font-[550] text-paper focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ember"
-              >
-                <option value="" disabled className="text-ink">
-                  Towns…
-                </option>
-                {towns.map((town) => (
-                  <option key={town.town} value={town.town} className="text-ink">
-                    {town.town}
+        ) : (
+          <>
+            <Button variant="paper" size="sm" loading={locating} onClick={requestLocation}>
+              <LocateFixed className="size-4" aria-hidden />
+              Use my location
+            </Button>
+            {towns.length > 0 && (
+              <>
+                <label htmlFor={selectId} className="text-[15px] text-paper-muted">
+                  or pick a town
+                </label>
+                <select
+                  id={selectId}
+                  value=""
+                  onChange={(e) => pickTown(e.target.value)}
+                  className="h-9 rounded-full border border-paper/30 bg-transparent px-4 text-sm font-[550] text-paper focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ember"
+                >
+                  <option value="" disabled className="text-ink">
+                    Towns…
                   </option>
-                ))}
-              </select>
-            </>
-          )}
-        </div>
-      )}
+                  {towns.map((town) => (
+                    <option key={town.town} value={town.town} className="text-ink">
+                      {town.town}
+                    </option>
+                  ))}
+                </select>
+              </>
+            )}
+          </>
+        )}
+      </div>
       {geoNote && (
         <p role="status" className="text-[13px] text-paper-muted">
           {geoNote}

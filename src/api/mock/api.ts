@@ -35,7 +35,9 @@ import {
   branches,
   menus,
   mockMarketplace,
+  promoFieldsFor,
   publishedRestaurants,
+  resetMarketplaceForTests,
   restaurantForBranch,
 } from './data'
 import { mockStore } from './store'
@@ -155,6 +157,15 @@ function priceCart(branch: Branch, request: CartValidateRequest): PricedCart {
   }
 }
 
+/**
+ * TEST-ONLY: one reset for the whole mock API — user-state store AND
+ * marketplace fixtures — so a suite can't forget half the seams.
+ */
+export function resetMockApiForTests() {
+  mockStore.resetForTests()
+  resetMarketplaceForTests()
+}
+
 /* ---- public browse ---------------------------------------------------- */
 
 export async function listRestaurants(): Promise<RestaurantList> {
@@ -194,15 +205,7 @@ export async function getBranchMenu(branchId: string): Promise<Menu> {
     ...menu,
     categories: menu.categories.map((category) => ({
       ...category,
-      items: category.items.map((item) => {
-        const promo = activePromoFor(item.id, now)
-        return {
-          ...item,
-          onlinePromoPriceCents: promo ? promo.promoPriceCents : null,
-          promoEndsAt:
-            promo && promo.endsAtMs !== null ? new Date(promo.endsAtMs).toISOString() : null,
-        }
-      }),
+      items: category.items.map((item) => ({ ...item, ...promoFieldsFor(item.id, now) })),
     })),
   }
 }
@@ -226,7 +229,6 @@ function marketplaceItemFor(
 ): MarketplaceItem | null {
   const branch = restaurant.branches.find((b) => b.id === branchId)
   if (!branch) return null
-  const promo = activePromoFor(item.id, nowMs)
   const distanceKm =
     coords && branch.latitude != null && branch.longitude != null
       ? roundKm(
@@ -240,8 +242,7 @@ function marketplaceItemFor(
     name: item.name,
     imageUrl: item.imageUrl ?? null,
     priceCents: item.priceCents,
-    onlinePromoPriceCents: promo ? promo.promoPriceCents : null,
-    promoEndsAt: promo && promo.endsAtMs !== null ? new Date(promo.endsAtMs).toISOString() : null,
+    ...promoFieldsFor(item.id, nowMs),
     branchId,
     branchName: branch.name,
     restaurantName: restaurant.name,

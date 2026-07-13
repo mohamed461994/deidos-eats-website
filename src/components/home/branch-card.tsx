@@ -10,12 +10,14 @@
  * for the evening" when the truth is "not taking orders at all".
  */
 import { Bike, Clock, MapPin, ShoppingBag } from 'lucide-react'
+import { memo } from 'react'
 import { Link } from 'react-router-dom'
 
 import type { MarketplaceBranch, Restaurant } from '@/api/types'
 import { FoodImage } from '@/components/food-image'
 import { Badge } from '@/components/ui/badge'
 import { formatKm } from '@/lib/distance'
+import { STATUS_LABELS } from '@/lib/restaurant'
 import { paths } from '@/lib/routes'
 import { cn } from '@/lib/utils'
 
@@ -34,10 +36,10 @@ interface BranchCardProps {
 
 function AvailabilityLine({ branch, brand }: BranchCardProps) {
   if (brand?.marketplaceStatus === 'comingSoon') {
-    return <Badge variant="crust">Coming soon</Badge>
+    return <Badge variant="crust">{STATUS_LABELS.comingSoon}</Badge>
   }
   if (brand?.marketplaceStatus === 'paused') {
-    return <Badge variant="neutral">Taking a break</Badge>
+    return <Badge variant="neutral">{STATUS_LABELS.paused}</Badge>
   }
   return (
     <span
@@ -52,7 +54,8 @@ function AvailabilityLine({ branch, brand }: BranchCardProps) {
   )
 }
 
-export function BranchCard({ branch, brand }: BranchCardProps) {
+/** Memoized: the feed re-renders on every location tick; unchanged cards skip. */
+export const BranchCard = memo(function BranchCard({ branch, brand }: BranchCardProps) {
   const fulfillment = branch.fulfillment
   return (
     <Link
@@ -64,7 +67,7 @@ export function BranchCard({ branch, brand }: BranchCardProps) {
           src={brand?.imageUrl ?? null}
           alt=""
           fallbackLabel={branch.restaurantName}
-          className="aspect-[16/9] w-full transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-[1.03] motion-reduce:transition-none"
+          className="aspect-[16/9] w-full transition-transform duration-500 ease-(--ease-out) group-hover:scale-[1.03] motion-reduce:transition-none"
         />
         {brand?.logoUrl && (
           <img
@@ -105,4 +108,4 @@ export function BranchCard({ branch, brand }: BranchCardProps) {
       </div>
     </Link>
   )
-}
+})

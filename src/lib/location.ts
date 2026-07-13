@@ -14,6 +14,8 @@
  */
 import { useCallback, useSyncExternalStore } from 'react'
 
+import { safeRemove, safeSet } from '@/cart/storage'
+
 export const HOME_LOCATION_KEY = 'deidos-home-location-v1'
 
 export type HomeLocation =
@@ -77,14 +79,12 @@ function readLocation(): HomeLocation | null {
   return cachedLocation
 }
 
+// Best-effort persistence (cart/storage's never-throw wrappers); the in-memory
+// fallback set first keeps this session's pick when storage is blocked.
 function write(raw: string | null) {
   memoryFallback = raw
-  try {
-    if (raw === null) localStorage.removeItem(HOME_LOCATION_KEY)
-    else localStorage.setItem(HOME_LOCATION_KEY, raw)
-  } catch {
-    // Storage blocked — the in-memory fallback keeps this session's pick.
-  }
+  if (raw === null) safeRemove(HOME_LOCATION_KEY)
+  else safeSet(HOME_LOCATION_KEY, raw)
   listeners.forEach((listener) => listener())
 }
 

@@ -14,18 +14,14 @@ import { PriceWasNow } from '@/components/price-was-now'
 import { formatCents } from '@/lib/money'
 import { formatKm } from '@/lib/distance'
 import { paths } from '@/lib/routes'
-
-// Stagger the first few cards' rise; beyond that they arrive together (a long
-// tail of delays reads as lag, not craft).
-const MAX_STAGGER_INDEX = 5
-const STAGGER_STEP_MS = 40
+import { staggerDelayMs } from '@/lib/utils'
 
 function ItemCard({ item, index }: { item: MarketplaceItem; index: number }) {
   const promoActive = item.onlinePromoPriceCents != null
   return (
     <li
       className="rise-in w-[230px] shrink-0 snap-start sm:w-[256px]"
-      style={{ animationDelay: `${Math.min(index, MAX_STAGGER_INDEX) * STAGGER_STEP_MS}ms` }}
+      style={{ animationDelay: staggerDelayMs(index) }}
     >
       <Link
         to={paths.restaurantMenu(item.restaurantSlug, item.branchId)}
@@ -37,7 +33,7 @@ function ItemCard({ item, index }: { item: MarketplaceItem; index: number }) {
             src={item.imageUrl}
             alt=""
             fallbackLabel={item.name}
-            className="aspect-[4/3] w-full transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-[1.04] motion-reduce:transition-none"
+            className="aspect-[4/3] w-full transition-transform duration-500 ease-(--ease-out) group-hover:scale-[1.04] motion-reduce:transition-none"
           />
         </div>
         <div className="mt-3 flex items-baseline justify-between gap-3">

@@ -7,31 +7,20 @@
  * gated on admin URLs. Drives the REAL <App/>.
  */
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import App from '@/App'
+import { resetMockApiForTests } from '@/api/mock/api'
 import {
   CORK_BRANCH_ID,
   GALWAY_BRANCH_ID,
   mockMarketplace,
-  resetMarketplaceForTests,
   restaurantA,
   restaurantB,
   restaurantPaused,
 } from '@/api/mock/data'
 import { queryClient } from '@/api/query-client'
 import { HOME_LOCATION_KEY } from '@/lib/location'
-
-class IO {
-  observe() {}
-  unobserve() {}
-  disconnect() {}
-  takeRecords() {
-    return []
-  }
-}
-vi.stubGlobal('IntersectionObserver', IO)
-window.scrollTo = () => {}
 
 function renderAt(path: string) {
   window.history.pushState({}, '', path)
@@ -57,7 +46,7 @@ async function findBranchFeed() {
 
 beforeEach(() => {
   localStorage.clear()
-  resetMarketplaceForTests()
+  resetMockApiForTests()
   // The query client is module-scoped (one per test FILE) — drop cached home
   // payloads so each test's fixture overrides actually load.
   queryClient.clear()
@@ -126,7 +115,7 @@ describe('home page — branch feed', () => {
     renderAt('/')
     const feed = await findBranchFeed()
     const pausedCard = within(feed).getByRole('heading', { name: 'Harbour Road' }).closest('a')!
-    expect(within(pausedCard).getByText('Taking a break')).toBeInTheDocument()
+    expect(within(pausedCard).getByText('Not taking orders')).toBeInTheDocument()
     expect(within(pausedCard).getByText('The Dock')).toBeInTheDocument()
   })
 
@@ -225,8 +214,9 @@ describe('home page — location control', () => {
     await findBranchFeed()
     fireEvent.click(screen.getByRole('button', { name: /use my location/i }))
 
-    // Located: chip appears, feed re-sorts nearest-first (Galway fix → Quay St first).
-    await screen.findByText(/closest kitchens first/i, {}, { timeout: 5000 })
+    // Located: the chip (with its clear affordance) appears, feed re-sorts
+    // nearest-first (Galway fix → Quay St first).
+    await screen.findByRole('button', { name: /clear location/i }, { timeout: 5000 })
     const feed = await findBranchFeed()
     await within(feed).findAllByText(/km away/, {}, { timeout: 5000 })
     // The stored fix is rounded to 3 decimals — never the raw reading.

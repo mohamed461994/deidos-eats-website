@@ -4,8 +4,28 @@
  * card, discovery, and restaurant home all say the same true thing.
  */
 import type { Restaurant } from '@/api/types'
+import { config } from '@/config'
 
 export type AvailabilityTone = 'open' | 'partial' | 'closed' | 'comingSoon' | 'paused' | 'none'
+
+/**
+ * Marketplace-status copy shared by restaurant cards and branch cards, so the
+ * same status never reads differently on two surfaces.
+ */
+export const STATUS_LABELS = {
+  comingSoon: 'Coming soon',
+  paused: 'Not taking orders',
+} as const
+
+/**
+ * The `VITE_RESTAURANT_ID` rollback pin: when set and present in the loaded
+ * list, the site behaves as a single-restaurant site — route roots redirect
+ * into that restaurant's home. Null while unpinned or still loading.
+ */
+export function pinnedRestaurantOf(restaurants: readonly Restaurant[] | undefined): Restaurant | null {
+  if (!config.restaurantId) return null
+  return restaurants?.find((r) => r.id === config.restaurantId) ?? null
+}
 
 export interface Availability {
   /** Precise, human-facing label — e.g. "1 of 2 locations open". */
@@ -21,9 +41,9 @@ export function openBranchCount(restaurant: Pick<Restaurant, 'branches'>): numbe
 
 export function availabilityOf(restaurant: Restaurant): Availability {
   if (restaurant.marketplaceStatus === 'comingSoon')
-    return { label: 'Coming soon', tone: 'comingSoon', canOrderNow: false }
+    return { label: STATUS_LABELS.comingSoon, tone: 'comingSoon', canOrderNow: false }
   if (restaurant.marketplaceStatus === 'paused')
-    return { label: 'Not taking orders', tone: 'paused', canOrderNow: false }
+    return { label: STATUS_LABELS.paused, tone: 'paused', canOrderNow: false }
 
   const total = restaurant.branches.length
   if (total === 0) return { label: 'No locations yet', tone: 'none', canOrderNow: false }
