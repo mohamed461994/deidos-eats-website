@@ -16,6 +16,7 @@ import { mockStore } from '@/api/mock/store'
 import { AuthFlowError, type AuthProvider, type SignUpResult } from './provider'
 
 const SESSION_KEY = 'puca-mock-session-v1'
+let pendingStaff: { email: string; mode: 'challenge' | 'enrollment' } | null = null
 
 export const mockAuthProvider: AuthProvider = {
   async getAccessToken() {
@@ -32,12 +33,57 @@ export const mockAuthProvider: AuthProvider = {
 
   async signIn(email, password) {
     await new Promise((r) => setTimeout(r, 600))
+    pendingStaff = null
     if (mockStore.profileStatus(email) === 'none' || password.length < 12)
       throw new AuthFlowError('Wrong email or password.', 'invalid_credentials')
     if (mockStore.profileStatus(email) === 'unconfirmed')
       throw new AuthFlowError('Confirm your email first — check your inbox.', 'not_confirmed')
+    if (
+      mockStore.profileRole(email) !== 'buyer' &&
+      mockStore.hasStaffMfa(email)
+    )
+      throw new AuthFlowError(
+        'This account uses the designated staff sign-in page.',
+        'staff_sign_in_required',
+      )
     localStorage.setItem(SESSION_KEY, email)
     mockStore.signInAs(email)
+  },
+
+  async beginStaffSignIn(email, password) {
+    await new Promise((r) => setTimeout(r, 600))
+    localStorage.removeItem(SESSION_KEY)
+    mockStore.clearSession()
+    pendingStaff = null
+    if (mockStore.profileStatus(email) !== 'confirmed' || password.length < 12)
+      throw new AuthFlowError('Wrong email or password.', 'invalid_credentials')
+    if (!['admin', 'restaurant_manager'].includes(mockStore.profileRole(email)))
+      throw new AuthFlowError(
+        'This account does not have access to the staff panel.',
+        'staff_access_denied',
+      )
+    const mode = mockStore.hasStaffMfa(email) ? 'challenge' : 'enrollment'
+    pendingStaff = { email, mode }
+    return mode === 'challenge'
+      ? ({ kind: 'totpChallenge' } as const)
+      : ({ kind: 'totpEnrollment', secret: 'JBSWY3DPEHPK3PXP' } as const)
+  },
+
+  async confirmStaffMfa(code) {
+    await new Promise((r) => setTimeout(r, 400))
+    if (!pendingStaff) throw new AuthFlowError('Start staff sign-in again.', 'unknown')
+    if (!/^\d{6}$/.test(code))
+      throw new AuthFlowError('That authenticator code is wrong or expired.', 'mfa_code_mismatch')
+    if (pendingStaff.mode === 'enrollment') mockStore.setStaffMfa(pendingStaff.email, true)
+    localStorage.setItem(SESSION_KEY, pendingStaff.email)
+    mockStore.signInAs(pendingStaff.email)
+    pendingStaff = null
+  },
+
+  async cancelStaffSignIn() {
+    pendingStaff = null
+    localStorage.removeItem(SESSION_KEY)
+    mockStore.clearSession()
   },
 
   async signUp(email, password, fullName): Promise<SignUpResult> {
@@ -70,6 +116,7 @@ export const mockAuthProvider: AuthProvider = {
   },
 
   async signOut() {
+    pendingStaff = null
     localStorage.removeItem(SESSION_KEY)
     mockStore.clearSession()
   },

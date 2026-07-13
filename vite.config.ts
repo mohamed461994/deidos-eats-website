@@ -5,6 +5,8 @@ import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig, loadEnv } from 'vite'
 
+import { normalizeStaffSignInPath } from './src/lib/staff-path'
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), 'VITE_')
   const apiProxyTarget = env.VITE_API_BASE_URL?.replace(/\/$/, '')
@@ -28,6 +30,7 @@ export default defineConfig(({ mode }) => {
           'Inject it in the CI build environment / .env.production (see implementation.md §7).',
       )
     }
+    if (env.VITE_STAFF_SIGN_IN_PATH) normalizeStaffSignInPath(env.VITE_STAFF_SIGN_IN_PATH)
   }
 
   return {

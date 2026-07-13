@@ -24,6 +24,9 @@ interface ProfileRecord {
    * treated as confirmed so nobody is locked out of an account they were using.
    */
   confirmed?: boolean
+  role?: User['role']
+  staffMfaEnrolled?: boolean
+  staffBranchIds?: string[]
 }
 
 export type ProfileStatus = 'none' | 'unconfirmed' | 'confirmed'
@@ -78,7 +81,7 @@ function toUser(email: string, record: ProfileRecord): User {
     email,
     fullName: record.fullName,
     phone: record.phone,
-    role: 'buyer',
+    role: record.role ?? 'buyer',
     createdAt: record.createdAt,
   }
 }
@@ -98,6 +101,7 @@ function ensureProfile(email: string): ProfileRecord {
       phone: null,
       createdAt: new Date().toISOString(),
       confirmed: true,
+      role: 'buyer',
     }
     state.profiles[key] = record
     persist()
@@ -146,6 +150,7 @@ export const mockStore = {
       phone: existing?.phone ?? null,
       createdAt: existing?.createdAt ?? new Date().toISOString(),
       confirmed: false,
+      role: 'buyer',
     }
     persist()
   },
@@ -155,6 +160,44 @@ export const mockStore = {
     if (!record) return 'none'
     // Records predating the `confirmed` field are grandfathered as confirmed.
     return record.confirmed === false ? 'unconfirmed' : 'confirmed'
+  },
+  profileRole(email: string): User['role'] {
+    return state.profiles[normalizeEmail(email)]?.role ?? 'buyer'
+  },
+  hasStaffMfa(email: string): boolean {
+    return state.profiles[normalizeEmail(email)]?.staffMfaEnrolled === true
+  },
+  setStaffMfa(email: string, enrolled: boolean) {
+    const record = ensureProfile(email)
+    record.staffMfaEnrolled = enrolled
+    persist()
+  },
+  /** Seed a privileged Cognito/API identity for focused staff-panel tests. */
+  seedStaffForTests(
+    email: string,
+    role: Extract<User['role'], 'restaurant_staff' | 'admin' | 'restaurant_manager'>,
+    options: { mfaEnrolled?: boolean; branchIds?: string[] } = {},
+  ) {
+    const key = normalizeEmail(email)
+    state.profiles[key] = {
+      id: state.profiles[key]?.id ?? crypto.randomUUID(),
+      fullName:
+        role === 'admin'
+          ? 'Platform Admin'
+          : role === 'restaurant_manager'
+            ? 'Branch Manager'
+            : 'Restaurant Staff',
+      phone: null,
+      createdAt: state.profiles[key]?.createdAt ?? new Date().toISOString(),
+      confirmed: true,
+      role,
+      staffMfaEnrolled: options.mfaEnrolled ?? false,
+      staffBranchIds: options.branchIds ?? [],
+    }
+    persist()
+  },
+  staffBranchIds(email: string): string[] {
+    return [...(state.profiles[normalizeEmail(email)]?.staffBranchIds ?? [])]
   },
   /** Mark the account's email as confirmed (the mock's confirmRegistration). */
   markConfirmed(email: string) {

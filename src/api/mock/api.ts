@@ -8,6 +8,9 @@
 import type {
   Address,
   AddressCreate,
+  AdminBranch,
+  AdminBranchList,
+  AdminRestaurantList,
   Branch,
   CartValidateRequest,
   CheckoutRequest,
@@ -16,19 +19,29 @@ import type {
   MarketplaceHome,
   MarketplaceItem,
   Menu,
+  MenuCatalogItem,
+  MenuCatalogPage,
   MenuItem,
+  MenuItemUpdate,
   Order,
   OrderList,
   PricedCart,
   PricedCartLine,
   Restaurant,
   RestaurantList,
+  StaffBranchMembershipList,
   User,
   UserUpdate,
 } from '@/api/types'
 import { haversineKm } from '@/lib/distance'
 
 import { ApiError } from '../errors'
+import {
+  bumpMockPromoTokenForTests,
+  listMockMenuCatalog,
+  resetMockAdminForTests,
+  updateMockPromo,
+} from './admin'
 import {
   activePromoFor,
   allRestaurants,
@@ -164,7 +177,10 @@ function priceCart(branch: Branch, request: CartValidateRequest): PricedCart {
 export function resetMockApiForTests() {
   mockStore.resetForTests()
   resetMarketplaceForTests()
+  resetMockAdminForTests()
 }
+
+export { bumpMockPromoTokenForTests }
 
 /* ---- public browse ---------------------------------------------------- */
 
@@ -517,6 +533,112 @@ export async function getMe(): Promise<User> {
   await delay(200)
   // requireUser runs the first-login sync — a fresh account gets an empty record.
   return requireUser()
+}
+
+function requirePromoAccess(branchId: string): User {
+  const user = requireUser()
+  if (user.role === 'admin') return user
+  if (
+    user.role === 'restaurant_manager' &&
+    mockStore.staffBranchIds(user.email).includes(branchId)
+  ) {
+    return user
+  }
+  fail(403, 'forbidden', 'You do not have access to this branch.')
+}
+
+export async function listMyStaffBranches(): Promise<StaffBranchMembershipList> {
+  await delay()
+  const user = requireUser()
+  return {
+    items: mockStore.staffBranchIds(user.email).flatMap((branchId) => {
+      const branch = branches[branchId]
+      const restaurant = branch ? restaurantForBranch(branchId) : undefined
+      if (!branch || !restaurant) return []
+      return [
+        {
+          branchId,
+          branchName: branch.name,
+          restaurantId: restaurant.id,
+          restaurantName: restaurant.name,
+          town: branch.address.town,
+          addressLine1: branch.address.line1,
+          county: branch.address.county,
+          eircode: branch.address.eircode,
+          role: 'manager' as const,
+        },
+      ]
+    }),
+  }
+}
+
+function adminBranch(branchId: string): AdminBranch | null {
+  const branch = branches[branchId]
+  if (!branch) return null
+  return {
+    ...branch,
+    createdAt: '2026-07-01T09:00:00.000Z',
+    updatedAt: '2026-07-12T09:00:00.000Z',
+  }
+}
+
+export async function listAdminBranches(): Promise<AdminBranchList> {
+  await delay()
+  const user = requireUser()
+  if (user.role !== 'admin') fail(403, 'forbidden', 'Admin access is required.')
+  return {
+    items: Object.keys(branches).flatMap((branchId) => {
+      const branch = adminBranch(branchId)
+      return branch ? [branch] : []
+    }),
+    pageInfo: { nextCursor: null },
+  }
+}
+
+export async function listAdminRestaurants(): Promise<AdminRestaurantList> {
+  await delay()
+  const user = requireUser()
+  if (user.role !== 'admin') fail(403, 'forbidden', 'Admin access is required.')
+  return {
+    items: allRestaurants.map((restaurant) => ({
+      id: restaurant.id,
+      slug: restaurant.slug,
+      name: restaurant.name,
+      description: restaurant.description ?? null,
+      tagline: restaurant.tagline ?? null,
+      logoUrl: restaurant.logoUrl ?? null,
+      heroImageUrl: restaurant.heroImageUrl ?? null,
+      heroImageAlt: restaurant.heroImageAlt ?? null,
+      lifecycleStatus: 'published' as const,
+      isPaused: restaurant.marketplaceStatus === 'paused',
+      createdAt: '2026-07-01T09:00:00.000Z',
+      updatedAt: '2026-07-12T09:00:00.000Z',
+    })),
+    pageInfo: { nextCursor: null },
+  }
+}
+
+export async function getStaffBranchMenuCatalog(
+  branchId: string,
+): Promise<MenuCatalogPage> {
+  await delay()
+  requirePromoAccess(branchId)
+  return listMockMenuCatalog(branchId)
+}
+
+export async function updateStaffItemPromo(
+  itemId: string,
+  update: MenuItemUpdate,
+): Promise<MenuCatalogItem> {
+  await delay()
+  const branchId = Object.keys(menus).find((candidate) =>
+    menus[candidate].categories.some((category) =>
+      category.items.some((item) => item.id === itemId),
+    ),
+  )
+  if (!branchId) fail(404, 'not_found', 'Item not found.')
+  requirePromoAccess(branchId)
+  return updateMockPromo(itemId, update)
 }
 
 export async function updateMe(update: UserUpdate): Promise<User> {

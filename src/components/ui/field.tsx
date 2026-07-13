@@ -1,4 +1,9 @@
-import { useId, type InputHTMLAttributes, type TextareaHTMLAttributes } from 'react'
+import {
+  useId,
+  type InputHTMLAttributes,
+  type SelectHTMLAttributes,
+  type TextareaHTMLAttributes,
+} from 'react'
 
 import { cn } from '@/lib/utils'
 
@@ -67,6 +72,44 @@ export function TextAreaField({
         aria-describedby={describedBy}
         {...props}
       />
+      {hint && !error && (
+        <p id={`${id}-hint`} className="text-[13px] text-muted">
+          {hint}
+        </p>
+      )}
+      {error && (
+        <p id={`${id}-error`} role="alert" className="text-[13px] font-[550] text-error">
+          {error}
+        </p>
+      )}
+    </div>
+  )
+}
+
+export function SelectField({
+  label,
+  error,
+  hint,
+  className,
+  children,
+  ...props
+}: FieldProps & SelectHTMLAttributes<HTMLSelectElement>) {
+  const id = useId()
+  const describedBy = error ? `${id}-error` : hint ? `${id}-hint` : undefined
+  return (
+    <div className={cn('flex flex-col gap-1.5', className)}>
+      <label htmlFor={id} className="text-sm font-[550] text-ink">
+        {label}
+      </label>
+      <select
+        id={id}
+        className={cn(inputClasses, 'min-h-11')}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={describedBy}
+        {...props}
+      >
+        {children}
+      </select>
       {hint && !error && (
         <p id={`${id}-hint`} className="text-[13px] text-muted">
           {hint}

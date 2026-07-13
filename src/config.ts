@@ -5,6 +5,8 @@
  * implementation.md). `mock` exists ONLY for the unit-test harness (set via
  * .env.test); it must never be used to run the site — see implementation.md §0.
  */
+import { normalizeStaffSignInPath } from '@/lib/staff-path'
+
 export type ApiMode = 'mock' | 'live'
 
 const env = import.meta.env
@@ -18,6 +20,8 @@ export const config = {
     userPoolId: (env.VITE_COGNITO_USER_POOL_ID as string | undefined) ?? '',
     clientId: (env.VITE_COGNITO_CLIENT_ID as string | undefined) ?? '',
   },
+  /** Public noise-reduction route only; MFA + server authz remain the security boundary. */
+  staffSignInPath: normalizeStaffSignInPath(env.VITE_STAFF_SIGN_IN_PATH),
   stripePublishableKey: (env.VITE_STRIPE_PUBLISHABLE_KEY as string | undefined) ?? '',
   restaurantId: (env.VITE_RESTAURANT_ID as string | undefined) ?? '',
 } as const
