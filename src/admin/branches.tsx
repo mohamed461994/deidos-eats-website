@@ -2,7 +2,7 @@ import { Compass, MapPin, Pencil, Plus, Store } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 
-import { errorMessage } from '@/api'
+import { errorMessage, isApiError } from '@/api'
 import { adminApi } from '@/api/admin-api'
 import type { AdminBranch, AdminBranchCreate, AdminBranchUpdate, OpeningHour } from '@/api/types'
 import { EmptyState, ErrorState } from '@/components/states'
@@ -15,6 +15,27 @@ import { formatCents } from '@/lib/money'
 
 import { adminQueryKeys, useAdminBranches, useAdminRestaurants } from './queries'
 import { AdminCard, AdminPage, DetailLabel, HoursEditor, ImageUploadField, PageHeader } from './shared'
+import { hasApiValidationIssue } from './validation'
+
+const eircodePattern = /^[AC-FHKNPRTV-Y][0-9]{2}\s?[0-9AC-FHKNPRTV-Y]{4}$/i
+
+type BranchField =
+  | 'restaurantId'
+  | 'name'
+  | 'description'
+  | 'line1'
+  | 'line2'
+  | 'town'
+  | 'county'
+  | 'eircode'
+  | 'latitude'
+  | 'longitude'
+  | 'timezone'
+  | 'deliveryFee'
+  | 'minimumOrder'
+  | 'deliveryRadius'
+  | 'openingHours'
+type BranchFieldErrors = Partial<Record<BranchField, string>>
 
 function euroInput(cents: number | null | undefined) {
   return cents === null || cents === undefined ? '' : (cents / 100).toFixed(2)
@@ -31,6 +52,30 @@ function branchHoursSummary(hours: OpeningHour[]) {
   if (hours.length === 0) return 'No service hours configured'
   const days = new Set(hours.map((entry) => entry.weekday)).size
   return `${days} day${days === 1 ? '' : 's'} configured · ${hours.length} shift${hours.length === 1 ? '' : 's'}`
+}
+
+function validationErrorsFromApi(error: unknown): BranchFieldErrors {
+  const errors: BranchFieldErrors = {}
+  const add = (field: BranchField, path: string[], message: string) => {
+    if (hasApiValidationIssue(error, path)) errors[field] = message
+  }
+
+  add('restaurantId', ['restaurantId'], 'Choose the restaurant this branch belongs to.')
+  add('name', ['name'], 'Enter a branch name.')
+  add('description', ['description'], 'Check the branch description.')
+  add('timezone', ['timezone'], 'Enter a timezone, usually Europe/Dublin.')
+  add('line1', ['address', 'line1'], 'Enter the first line of the address.')
+  add('line2', ['address', 'line2'], 'Check the second address line.')
+  add('town', ['address', 'town'], 'Enter the town or city.')
+  add('county', ['address', 'county'], 'Enter the county.')
+  add('eircode', ['address', 'eircode'], 'Enter a valid Irish Eircode, for example D02 X285.')
+  add('latitude', ['address', 'latitude'], 'Enter a latitude between -90 and 90.')
+  add('longitude', ['address', 'longitude'], 'Enter a longitude between -180 and 180.')
+  add('deliveryFee', ['fulfillment', 'deliveryFeeCents'], 'Enter a valid delivery fee.')
+  add('minimumOrder', ['fulfillment', 'minOrderCents'], 'Enter a valid minimum order.')
+  add('deliveryRadius', ['fulfillment', 'deliveryRadiusKm'], 'Enter a delivery radius of zero or more.')
+  add('openingHours', ['openingHours'], 'Check the opening hours.')
+  return errors
 }
 
 function BranchEditor({ branch, onClose, onCreated }: { branch: AdminBranch | null; onClose: () => void; onCreated: (branch: AdminBranch) => void }) {
@@ -57,45 +102,72 @@ function BranchEditor({ branch, onClose, onCreated }: { branch: AdminBranch | nu
   const [cashEnabled, setCashEnabled] = useState(branch?.payment.cashEnabled ?? false)
   const [imageObjectKey, setImageObjectKey] = useState<string | null | undefined>(undefined)
   const [error, setError] = useState<string | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<BranchFieldErrors>({})
   const [saving, setSaving] = useState(false)
 
-  function coordinate(value: string, label: string): number | null | 'invalid' {
+  function clearFieldError(field: BranchField) {
+    setFieldErrors((current) => ({ ...current, [field]: undefined }))
+  }
+
+  function coordinate(value: string): number | null | 'invalid' {
     if (!value.trim()) return null
     const number = Number(value)
-    if (!Number.isFinite(number)) {
-      setError(`${label} must be a number.`)
-      return 'invalid'
-    }
+    if (!Number.isFinite(number)) return 'invalid'
     return number
   }
 
   async function submit(event: FormEvent) {
     event.preventDefault()
     setError(null)
-    if (!restaurantId || !name.trim() || !line1.trim() || !town.trim() || !county.trim() || !eircode.trim()) {
-      setError('Choose a restaurant and complete the required branch and address details.')
-      return
+    const clientErrors: BranchFieldErrors = {}
+    if (!restaurantId) clientErrors.restaurantId = 'Choose the restaurant this branch belongs to.'
+    if (!name.trim()) clientErrors.name = 'Enter a branch name.'
+    if (!line1.trim()) clientErrors.line1 = 'Enter the first line of the address.'
+    if (!town.trim()) clientErrors.town = 'Enter the town or city.'
+    if (!county.trim()) clientErrors.county = 'Enter the county.'
+    if (!eircode.trim()) {
+      clientErrors.eircode = 'Enter an Irish Eircode.'
+    } else if (!eircodePattern.test(eircode.trim())) {
+      clientErrors.eircode = 'Enter a valid Irish Eircode, for example D02 X285.'
     }
-    const lat = coordinate(latitude, 'Latitude')
-    const lng = coordinate(longitude, 'Longitude')
-    if (lat === 'invalid' || lng === 'invalid') return
-    if ((lat === null) !== (lng === null)) {
-      setError('Enter both latitude and longitude, or leave both blank.')
-      return
+    if (!timezone.trim()) clientErrors.timezone = 'Enter a timezone, usually Europe/Dublin.'
+
+    const lat = coordinate(latitude)
+    const lng = coordinate(longitude)
+    if (lat === 'invalid') clientErrors.latitude = 'Enter a latitude as a number.'
+    if (lng === 'invalid') clientErrors.longitude = 'Enter a longitude as a number.'
+    if (lat !== 'invalid' && lng !== 'invalid' && (lat === null) !== (lng === null)) {
+      clientErrors.latitude = 'Enter both coordinates, or leave both blank.'
+      clientErrors.longitude = 'Enter both coordinates, or leave both blank.'
     }
-    if (lat !== null && (lat < -90 || lat > 90 || lng! < -180 || lng! > 180)) {
-      setError('Coordinates are outside the valid latitude/longitude range.')
-      return
+    if (typeof lat === 'number' && (lat < -90 || lat > 90)) {
+      clientErrors.latitude = 'Enter a latitude between -90 and 90.'
+    }
+    if (typeof lng === 'number' && (lng < -180 || lng > 180)) {
+      clientErrors.longitude = 'Enter a longitude between -180 and 180.'
     }
     const fee = parseCents(deliveryFee)
     const minimum = parseCents(minimumOrder)
     const radius = deliveryRadius.trim() ? Number(deliveryRadius) : null
-    if (fee === 'invalid' || minimum === 'invalid' || (radius !== null && (!Number.isFinite(radius) || radius < 0))) {
-      setError('Check the delivery fee, minimum order, and radius.')
+    if (deliveryEnabled && fee === 'invalid') clientErrors.deliveryFee = 'Enter a delivery fee of zero or more.'
+    if (deliveryEnabled && minimum === 'invalid') clientErrors.minimumOrder = 'Enter a minimum order of zero or more.'
+    if (deliveryEnabled && radius !== null && (!Number.isFinite(radius) || radius < 0)) {
+      clientErrors.deliveryRadius = 'Enter a delivery radius of zero or more.'
+    }
+    if (hours.some((entry) => entry.opensAt === entry.closesAt)) {
+      clientErrors.openingHours = 'Opening and closing times must be different.'
+    }
+    setFieldErrors(clientErrors)
+    if (Object.keys(clientErrors).length > 0) {
+      setError('Check the highlighted fields, then try again.')
       return
     }
-    const fulfillment = deliveryEnabled ? { collectionEnabled, deliveryEnabled: true, deliveryFeeCents: fee, minOrderCents: minimum, deliveryRadiusKm: radius, deliveryBaseRadiusKm: null, deliveryPerKmCents: null } : { collectionEnabled, deliveryEnabled: false, deliveryFeeCents: null, minOrderCents: null, deliveryRadiusKm: null, deliveryBaseRadiusKm: null, deliveryPerKmCents: null }
-    const address = { line1: line1.trim(), line2: line2.trim() || null, town: town.trim(), county: county.trim(), eircode: eircode.trim().toUpperCase(), latitude: lat, longitude: lng }
+    const validLatitude = lat === 'invalid' ? null : lat
+    const validLongitude = lng === 'invalid' ? null : lng
+    const validFee = fee === 'invalid' ? null : fee
+    const validMinimum = minimum === 'invalid' ? null : minimum
+    const fulfillment = deliveryEnabled ? { collectionEnabled, deliveryEnabled: true, deliveryFeeCents: validFee, minOrderCents: validMinimum, deliveryRadiusKm: radius, deliveryBaseRadiusKm: null, deliveryPerKmCents: null } : { collectionEnabled, deliveryEnabled: false, deliveryFeeCents: null, minOrderCents: null, deliveryRadiusKm: null, deliveryBaseRadiusKm: null, deliveryPerKmCents: null }
+    const address = { line1: line1.trim(), line2: line2.trim() || null, town: town.trim(), county: county.trim(), eircode: eircode.trim().toUpperCase(), latitude: validLatitude, longitude: validLongitude }
     setSaving(true)
     try {
       if (branch) {
@@ -112,7 +184,15 @@ function BranchEditor({ branch, onClose, onCreated }: { branch: AdminBranch | nu
         onCreated(created)
       }
     } catch (saveError) {
-      setError(errorMessage(saveError))
+      const apiFieldErrors = validationErrorsFromApi(saveError)
+      setFieldErrors(apiFieldErrors)
+      setError(
+        Object.keys(apiFieldErrors).length > 0
+          ? 'Check the highlighted fields, then try again.'
+          : isApiError(saveError, 'validation_failed')
+            ? 'One or more values are invalid. Review the form and try again.'
+            : errorMessage(saveError),
+      )
     } finally {
       setSaving(false)
     }
@@ -137,8 +217,12 @@ function BranchEditor({ branch, onClose, onCreated }: { branch: AdminBranch | nu
             <SelectField
               label="Restaurant"
               value={restaurantId}
+              error={fieldErrors.restaurantId}
               disabled={Boolean(branch)}
-              onChange={(event) => setRestaurantId(event.target.value)}
+              onChange={(event) => {
+                setRestaurantId(event.target.value)
+                clearFieldError('restaurantId')
+              }}
             >
               <option value="">Choose restaurant</option>
               {(restaurants.data ?? [])
@@ -152,28 +236,41 @@ function BranchEditor({ branch, onClose, onCreated }: { branch: AdminBranch | nu
             <TextField
               label="Branch name"
               value={name}
+              error={fieldErrors.name}
               required
               maxLength={120}
-              onChange={(event) => setName(event.target.value)}
+              onChange={(event) => {
+                setName(event.target.value)
+                clearFieldError('name')
+              }}
             />
             <TextAreaField
               label="Description"
               value={description}
+              error={fieldErrors.description}
               maxLength={500}
-              onChange={(event) => setDescription(event.target.value)}
+              onChange={(event) => {
+                setDescription(event.target.value)
+                clearFieldError('description')
+              }}
             />
             <div className="grid gap-4 sm:grid-cols-2">
-              <TextField label="Address line 1" value={line1} required onChange={(event) => setLine1(event.target.value)} />
-              <TextField label="Address line 2" value={line2} onChange={(event) => setLine2(event.target.value)} />
-              <TextField label="Town" value={town} required onChange={(event) => setTown(event.target.value)} />
-              <TextField label="County" value={county} required onChange={(event) => setCounty(event.target.value)} />
-              <TextField label="Eircode" value={eircode} required onChange={(event) => setEircode(event.target.value)} />
+              <TextField label="Address line 1" value={line1} error={fieldErrors.line1} required maxLength={120} onChange={(event) => { setLine1(event.target.value); clearFieldError('line1') }} />
+              <TextField label="Address line 2" value={line2} error={fieldErrors.line2} maxLength={120} onChange={(event) => { setLine2(event.target.value); clearFieldError('line2') }} />
+              <TextField label="Town" value={town} error={fieldErrors.town} required maxLength={80} onChange={(event) => { setTown(event.target.value); clearFieldError('town') }} />
+              <TextField label="County" value={county} error={fieldErrors.county} required maxLength={80} onChange={(event) => { setCounty(event.target.value); clearFieldError('county') }} />
+              <TextField label="Eircode" value={eircode} error={fieldErrors.eircode} required maxLength={8} onChange={(event) => { setEircode(event.target.value); clearFieldError('eircode') }} />
               <TextField
                 label="Timezone"
                 value={timezone}
+                error={fieldErrors.timezone}
                 required
+                maxLength={64}
                 hint="IANA timezone, normally Europe/Dublin."
-                onChange={(event) => setTimezone(event.target.value)}
+                onChange={(event) => {
+                  setTimezone(event.target.value)
+                  clearFieldError('timezone')
+                }}
               />
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
@@ -183,7 +280,11 @@ function BranchEditor({ branch, onClose, onCreated }: { branch: AdminBranch | nu
                 step="any"
                 placeholder="53.3267"
                 value={latitude}
-                onChange={(event) => setLatitude(event.target.value)}
+                error={fieldErrors.latitude}
+                onChange={(event) => {
+                  setLatitude(event.target.value)
+                  clearFieldError('latitude')
+                }}
               />
               <TextField
                 label="Longitude"
@@ -191,7 +292,11 @@ function BranchEditor({ branch, onClose, onCreated }: { branch: AdminBranch | nu
                 step="any"
                 placeholder="-6.2523"
                 value={longitude}
-                onChange={(event) => setLongitude(event.target.value)}
+                error={fieldErrors.longitude}
+                onChange={(event) => {
+                  setLongitude(event.target.value)
+                  clearFieldError('longitude')
+                }}
               />
             </div>
           </div>
@@ -214,13 +319,16 @@ function BranchEditor({ branch, onClose, onCreated }: { branch: AdminBranch | nu
               </div>
               {deliveryEnabled && (
                 <div className="mt-4 grid gap-4 sm:grid-cols-3">
-                  <TextField label="Delivery fee (€)" inputMode="decimal" value={deliveryFee} onChange={(event) => setDeliveryFee(event.target.value)} />
-                  <TextField label="Minimum order (€)" inputMode="decimal" value={minimumOrder} onChange={(event) => setMinimumOrder(event.target.value)} />
-                  <TextField label="Radius (km)" inputMode="decimal" value={deliveryRadius} onChange={(event) => setDeliveryRadius(event.target.value)} />
+                  <TextField label="Delivery fee (€)" inputMode="decimal" value={deliveryFee} error={fieldErrors.deliveryFee} onChange={(event) => { setDeliveryFee(event.target.value); clearFieldError('deliveryFee') }} />
+                  <TextField label="Minimum order (€)" inputMode="decimal" value={minimumOrder} error={fieldErrors.minimumOrder} onChange={(event) => { setMinimumOrder(event.target.value); clearFieldError('minimumOrder') }} />
+                  <TextField label="Radius (km)" inputMode="decimal" value={deliveryRadius} error={fieldErrors.deliveryRadius} onChange={(event) => { setDeliveryRadius(event.target.value); clearFieldError('deliveryRadius') }} />
                 </div>
               )}
             </fieldset>
-            <HoursEditor value={hours} onChange={setHours} />
+            <HoursEditor value={hours} error={fieldErrors.openingHours} onChange={(nextHours) => {
+              setHours(nextHours)
+              clearFieldError('openingHours')
+            }} />
             {branch ? (
               <ImageUploadField
                 label="Branch cover image"

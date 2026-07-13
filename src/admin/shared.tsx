@@ -209,9 +209,11 @@ const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'
 
 export function HoursEditor({
   value,
+  error,
   onChange,
 }: {
   value: OpeningHour[]
+  error?: string
   onChange: (value: OpeningHour[]) => void
 }) {
   function update(index: number, patch: Partial<OpeningHour>) {
@@ -230,6 +232,7 @@ export function HoursEditor({
     <fieldset className="rounded-[16px] border border-border bg-surface p-4">
       <legend className="px-1 text-sm font-[650] text-ink">Opening hours</legend>
       <p className="mb-3 text-[13px] text-muted">Use one row per shift. Add a second row for split service.</p>
+      {error && <p role="alert" className="mb-3 text-[13px] font-[550] text-error">{error}</p>}
       <div className="space-y-2">
         {DAYS.map((day, weekday) => {
           const entries = value

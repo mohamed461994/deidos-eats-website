@@ -151,6 +151,36 @@ describe('admin content and onboarding screens', () => {
     expect(screen.getByText(/membership assignment is an ops step/i)).toBeVisible()
   }, 30000)
 
+  it('explains an invalid restaurant slug next to the field before submitting', async () => {
+    await signInAdmin()
+    await openAdminScreen('/admin/restaurants', 'Restaurants')
+    fireEvent.click(screen.getByRole('button', { name: 'New restaurant' }))
+    setField('Restaurant name', 'Coastal Kitchen')
+    setField('Website slug', 'coastal kitchen!')
+    fireEvent.click(screen.getByRole('button', { name: 'Create draft' }))
+
+    expect(await screen.findByText(/lowercase words separated by single hyphens/i)).toBeVisible()
+    expect(screen.getByLabelText('Website slug')).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.queryByText('Some details look off — check the highlighted fields.')).toBeNull()
+  }, 20000)
+
+  it('explains an invalid branch Eircode next to the field before submitting', async () => {
+    await signInAdmin()
+    await openAdminScreen('/admin/branches', 'Branches')
+    fireEvent.click(screen.getByRole('button', { name: 'New branch' }))
+    fireEvent.change(screen.getByLabelText('Restaurant'), { target: { value: RESTAURANT_A_ID } })
+    setField('Branch name', 'Eircode Test Branch')
+    setField('Address line 1', '1 Test Lane')
+    setField('Town', 'Dublin')
+    setField('County', 'Dublin')
+    setField('Eircode', 'not-an-eircode')
+    fireEvent.click(screen.getByRole('button', { name: 'Create branch' }))
+
+    expect(await screen.findByText(/valid irish eircode/i)).toBeVisible()
+    expect(screen.getByLabelText('Eircode')).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.queryByText('Some details look off — check the highlighted fields.')).toBeNull()
+  }, 20000)
+
   it('requires a confirmation for the publish, pause, and archive lifecycle actions', async () => {
     await signInAdmin()
     await openAdminScreen('/admin/restaurants', 'Restaurants')

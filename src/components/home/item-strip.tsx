@@ -1,32 +1,40 @@
 /**
  * A merchandising strip — "From the oven" and "Discounted" share this one
  * anatomy: photo-led snap-scroll cards, each carrying its restaurant's name
- * (no anonymous flattening) and landing straight on that branch's menu. The
- * whole card is one link. An empty strip renders nothing — the section
+ * (no anonymous flattening). Tapping a card opens THAT item's customise-and-add
+ * dialog in place (via `onSelect`) — the same view as the branch menu — rather
+ * than navigating to the full menu. An empty strip renders nothing: the section
  * collapses rather than showing placeholder junk.
  */
 import type { ReactNode } from 'react'
-import { Link } from 'react-router-dom'
 
 import type { MarketplaceItem } from '@/api/types'
 import { FoodImage } from '@/components/food-image'
 import { PriceWasNow } from '@/components/price-was-now'
 import { formatCents } from '@/lib/money'
 import { formatKm } from '@/lib/distance'
-import { paths } from '@/lib/routes'
 import { staggerDelayMs } from '@/lib/utils'
 
-function ItemCard({ item, index }: { item: MarketplaceItem; index: number }) {
+function ItemCard({
+  item,
+  index,
+  onSelect,
+}: {
+  item: MarketplaceItem
+  index: number
+  onSelect: (item: MarketplaceItem) => void
+}) {
   const promoActive = item.onlinePromoPriceCents != null
   return (
     <li
       className="rise-in w-[230px] shrink-0 snap-start sm:w-[256px]"
       style={{ animationDelay: staggerDelayMs(index) }}
     >
-      <Link
-        to={paths.restaurantMenu(item.restaurantSlug, item.branchId)}
-        className="group block"
-        aria-label={`${item.name} — ${item.restaurantName}, ${item.branchName}`}
+      <button
+        type="button"
+        onClick={() => onSelect(item)}
+        className="group block w-full text-left"
+        aria-label={`${item.name} — ${item.restaurantName}, ${item.branchName}. Add to basket`}
       >
         <div className="overflow-hidden rounded-[16px]">
           <FoodImage
@@ -54,7 +62,7 @@ function ItemCard({ item, index }: { item: MarketplaceItem; index: number }) {
             <span className="tabular-nums"> · {formatKm(item.distanceKm)}</span>
           )}
         </p>
-      </Link>
+      </button>
     </li>
   )
 }
@@ -67,9 +75,18 @@ interface ItemStripProps {
   /** Rendered next to the title (e.g. the live ember dot on "From the oven"). */
   titleAccent?: ReactNode
   items: MarketplaceItem[]
+  /** Opens the tapped item's customise-and-add dialog. */
+  onSelect: (item: MarketplaceItem) => void
 }
 
-export function ItemStrip({ headingId, title, subtitle, titleAccent, items }: ItemStripProps) {
+export function ItemStrip({
+  headingId,
+  title,
+  subtitle,
+  titleAccent,
+  items,
+  onSelect,
+}: ItemStripProps) {
   if (items.length === 0) return null
   return (
     <section aria-labelledby={headingId}>
@@ -82,7 +99,12 @@ export function ItemStrip({ headingId, title, subtitle, titleAccent, items }: It
       {subtitle && <p className="mt-1 text-[15px] text-muted">{subtitle}</p>}
       <ul className="-mx-4 mt-5 flex snap-x gap-5 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:px-6">
         {items.map((item, index) => (
-          <ItemCard key={`${item.branchId}-${item.itemId}`} item={item} index={index} />
+          <ItemCard
+            key={`${item.branchId}-${item.itemId}`}
+            item={item}
+            index={index}
+            onSelect={onSelect}
+          />
         ))}
       </ul>
     </section>

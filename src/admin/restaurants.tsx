@@ -14,6 +14,35 @@ import { useToast } from '@/components/ui/toast'
 
 import { adminQueryKeys, useAdminRestaurants } from './queries'
 import { AdminCard, AdminPage, ConfirmAction, DetailLabel, ImageUploadField, PageHeader } from './shared'
+import { hasApiValidationIssue } from './validation'
+
+const slugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
+
+type RestaurantField = 'name' | 'slug' | 'tagline' | 'description' | 'heroImageAlt'
+type RestaurantFieldErrors = Partial<Record<RestaurantField, string>>
+
+function validateRestaurantFields(name: string, slug: string): RestaurantFieldErrors {
+  const errors: RestaurantFieldErrors = {}
+  if (!name.trim()) errors.name = 'Give the restaurant a name.'
+
+  const normalizedSlug = slug.trim().toLowerCase()
+  if (normalizedSlug && !slugPattern.test(normalizedSlug)) {
+    errors.slug = 'Use lowercase words separated by single hyphens, for example coastal-kitchen.'
+  }
+  return errors
+}
+
+function validationErrorsFromApi(error: unknown): RestaurantFieldErrors {
+  const fields: RestaurantField[] = ['name', 'slug', 'tagline', 'description', 'heroImageAlt']
+  return fields.reduce<RestaurantFieldErrors>((errors, field) => {
+    if (!hasApiValidationIssue(error, [field])) return errors
+    errors[field] =
+      field === 'slug'
+        ? 'Use lowercase words separated by single hyphens, for example coastal-kitchen.'
+        : 'Check this value and try again.'
+    return errors
+  }, {})
+}
 
 function statusBadge(restaurant: AdminRestaurant) {
   if (restaurant.lifecycleStatus === 'draft') return <Badge variant="crust">Draft</Badge>
@@ -40,13 +69,20 @@ function RestaurantEditor({
   const [logoObjectKey, setLogoObjectKey] = useState<string | null | undefined>(undefined)
   const [heroObjectKey, setHeroObjectKey] = useState<string | null | undefined>(undefined)
   const [error, setError] = useState<string | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<RestaurantFieldErrors>({})
   const [saving, setSaving] = useState(false)
+
+  function clearFieldError(field: RestaurantField) {
+    setFieldErrors((current) => ({ ...current, [field]: undefined }))
+  }
 
   async function submit(event: FormEvent) {
     event.preventDefault()
     setError(null)
-    if (!name.trim()) {
-      setError('Give the restaurant a name.')
+    const clientErrors = validateRestaurantFields(name, slug)
+    setFieldErrors(clientErrors)
+    if (Object.keys(clientErrors).length > 0) {
+      setError('Check the highlighted fields, then try again.')
       return
     }
     setSaving(true)
@@ -79,7 +115,13 @@ function RestaurantEditor({
         onCreated(created)
       }
     } catch (saveError) {
-      setError(errorMessage(saveError))
+      const apiFieldErrors = validationErrorsFromApi(saveError)
+      setFieldErrors(apiFieldErrors)
+      setError(
+        Object.keys(apiFieldErrors).length > 0
+          ? 'Check the highlighted fields, then try again.'
+          : errorMessage(saveError),
+      )
     } finally {
       setSaving(false)
     }
@@ -109,31 +151,56 @@ function RestaurantEditor({
             <TextField
               label="Restaurant name"
               value={name}
+              error={fieldErrors.name}
               required
               maxLength={120}
-              onChange={(event) => setName(event.target.value)}
+              onChange={(event) => {
+                setName(event.target.value)
+                clearFieldError('name')
+              }}
             />
             <TextField
               label="Website slug"
               value={slug}
+              error={fieldErrors.slug}
               disabled={!canEditSlug}
               maxLength={60}
               hint={canEditSlug ? 'Lowercase words separated by hyphens. This freezes at publication.' : 'The slug is frozen after publication.'}
-              onChange={(event) => setSlug(event.target.value)}
+              onChange={(event) => {
+                setSlug(event.target.value)
+                clearFieldError('slug')
+              }}
             />
-            <TextField label="Tagline" value={tagline} maxLength={160} onChange={(event) => setTagline(event.target.value)} />
+            <TextField
+              label="Tagline"
+              value={tagline}
+              error={fieldErrors.tagline}
+              maxLength={160}
+              onChange={(event) => {
+                setTagline(event.target.value)
+                clearFieldError('tagline')
+              }}
+            />
             <TextAreaField
               label="Description"
               value={description}
+              error={fieldErrors.description}
               maxLength={2000}
-              onChange={(event) => setDescription(event.target.value)}
+              onChange={(event) => {
+                setDescription(event.target.value)
+                clearFieldError('description')
+              }}
             />
             <TextField
               label="Hero image description"
               value={heroImageAlt}
+              error={fieldErrors.heroImageAlt}
               maxLength={160}
               hint="Describe the image for people using a screen reader."
-              onChange={(event) => setHeroImageAlt(event.target.value)}
+              onChange={(event) => {
+                setHeroImageAlt(event.target.value)
+                clearFieldError('heroImageAlt')
+              }}
             />
           </div>
           {restaurant ? (

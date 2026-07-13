@@ -7,16 +7,18 @@
  * never gates browsing. Every empty section collapses; every card is one tap
  * from a branch menu.
  */
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Navigate } from 'react-router-dom'
 
 import { errorMessage } from '@/api'
 import { useMarketplaceHome, useRestaurants } from '@/api/queries'
+import type { MarketplaceItem } from '@/api/types'
 import { BranchCard, type BranchBrand } from '@/components/home/branch-card'
 import { BannerStrip } from '@/components/home/banner-strip'
 import { ItemStrip } from '@/components/home/item-strip'
 import { LocationControl } from '@/components/home/location-control'
 import { StoreBadges } from '@/components/home/store-badges'
+import { QuickAddDialog } from '@/components/quick-add-dialog'
 import { EmptyState, ErrorState } from '@/components/states'
 import { Skeleton } from '@/components/ui/skeleton'
 import { townOptions, useHomeLocation } from '@/lib/location'
@@ -29,6 +31,10 @@ export function HomePage() {
   const homeQuery = useMarketplaceHome(location)
   const restaurantsQuery = useRestaurants()
   const restaurants = restaurantsQuery.data?.items
+
+  // The strip item being customised — its add-to-basket dialog opens in place
+  // over the home feed, so buyers never bounce out to the full menu to add it.
+  const [quickAddItem, setQuickAddItem] = useState<MarketplaceItem | null>(null)
 
   const home = homeQuery.data
   const located = location !== null
@@ -121,6 +127,7 @@ export function HomePage() {
               subtitle="What the kitchens are proud of today."
               titleAccent={<span aria-hidden className="ember-dot" />}
               items={home.ovenItems}
+              onSelect={setQuickAddItem}
             />
 
             <ItemStrip
@@ -128,6 +135,7 @@ export function HomePage() {
               title={discountedTitle}
               subtitle="Online prices, down for a limited time."
               items={home.discountedItems}
+              onSelect={setQuickAddItem}
             />
 
             <section aria-labelledby="home-branches-heading">
@@ -166,6 +174,8 @@ export function HomePage() {
           </>
         )}
       </div>
+
+      <QuickAddDialog item={quickAddItem} onClose={() => setQuickAddItem(null)} />
     </main>
   )
 }

@@ -139,12 +139,35 @@ describe('home page — merchandising sections', () => {
     expect(within(oven).getByText(/Deidos Grill · Ranelagh/)).toBeInTheDocument()
 
     const discounted = screen.getByRole('heading', { name: /on offer/i }).closest('section')!
-    // The Dublin house special: was €14.50, now €11.50.
-    const card = within(discounted).getByText('The House Special').closest('a')!
+    // The Dublin house special: was €14.50, now €11.50. Each card is a button
+    // (it opens the item's add dialog in place — no longer a link to the menu).
+    const card = within(discounted).getByText('The House Special').closest('button')!
     expect(within(card).getByText('€14.50')).toBeInTheDocument()
     expect(within(card).getByText('€11.50')).toBeInTheDocument()
     expect(within(card).getByText(/was €14\.50, now €11\.50/i)).toBeInTheDocument()
   })
+
+  it('opens the item’s add-to-basket dialog in place — never navigating to the menu', async () => {
+    renderAt('/')
+    // Home + branch-menu + restaurants each resolve through the mock's delay(),
+    // so this flow needs headroom beyond the 5s default.
+    const discounted = (
+      await screen.findByRole('heading', { name: /on offer/i }, { timeout: 5000 })
+    ).closest('section')!
+    fireEvent.click(within(discounted).getByText('The House Special'))
+
+    // Same customise view as the branch menu: modifier groups from the full
+    // item resolve in the dialog, and the promo "now" price rides the Add CTA.
+    const dialog = await screen.findByRole('dialog', {}, { timeout: 5000 })
+    expect(await within(dialog).findByText('Extra toppings', {}, { timeout: 5000 })).toBeInTheDocument()
+    const add = within(dialog).getByRole('button', { name: /^add ·/i })
+    expect(add).toHaveTextContent('€11.50')
+
+    fireEvent.click(add)
+    // Added straight to the basket, still on the home page (no menu navigation).
+    expect(await screen.findByText(/the house special added/i, {}, { timeout: 5000 })).toBeInTheDocument()
+    expect(window.location.pathname).toBe('/')
+  }, 20000)
 
   it('scopes merchandising to the location radius when located', async () => {
     localStorage.setItem(HOME_LOCATION_KEY, GALWAY_LOCATION)

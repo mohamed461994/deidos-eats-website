@@ -39,7 +39,51 @@ interface ItemDialogProps {
   onClose: () => void
 }
 
+/**
+ * The item detail dialog used on a branch menu: the Modal shell wrapping the
+ * shared {@link ItemDetail} body. Reused verbatim by the home page's quick-add
+ * dialog, which resolves the full menu item first and renders the same body.
+ */
 export function ItemDialog({ item, restaurant, branchId, branchName, onClose }: ItemDialogProps) {
+  if (!item) return null
+  return (
+    <Modal
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose()
+      }}
+      title={item.name}
+      hideTitle
+      shape="center"
+    >
+      <ItemDetail
+        key={item.id}
+        item={item}
+        restaurant={restaurant}
+        branchId={branchId}
+        branchName={branchName}
+        onClose={onClose}
+      />
+    </Modal>
+  )
+}
+
+interface ItemDetailProps {
+  /** The fully-resolved menu item (with modifier groups) to customise. */
+  item: MenuItem
+  /** The restaurant this item belongs to — travels onto the cart. */
+  restaurant: CartRestaurant
+  branchId: string
+  branchName: string
+  onClose: () => void
+}
+
+/**
+ * The scrollable body + add/conflict footer for one menu item. Rendered inside
+ * a {@link Modal} by the caller; per-item state resets via a `key` on this
+ * component (each item remounts fresh), so no manual reset is needed.
+ */
+export function ItemDetail({ item, restaurant, branchId, branchName, onClose }: ItemDetailProps) {
   const { addItem, openCart, cart, itemCount: cartCount } = useCart()
   const { toast } = useToast()
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -47,13 +91,10 @@ export function ItemDialog({ item, restaurant, branchId, branchName, onClose }: 
   const [conflict, setConflict] = useState(false)
   const [groupErrors, setGroupErrors] = useState<Set<string>>(new Set())
 
-  // Reset per item via key on the inner content
-  const options = useMemo(() => {
-    if (!item) return []
-    return (item.modifierGroups ?? []).flatMap((g) => g.options)
-  }, [item])
-
-  if (!item) return null
+  const options = useMemo(
+    () => (item.modifierGroups ?? []).flatMap((g) => g.options),
+    [item],
+  )
 
   const selectedOptions = options.filter((o) => selected.has(o.id))
   const unitPrice = effectiveUnitPriceCents(item, selectedOptions)
@@ -79,7 +120,6 @@ export function ItemDialog({ item, restaurant, branchId, branchName, onClose }: 
   }
 
   function handleAdd(force = false) {
-    if (!item) return
     const missing = (item.modifierGroups ?? []).filter((g) => countIn(g) < g.minSelect)
     if (missing.length > 0) {
       setGroupErrors(new Set(missing.map((g) => g.id)))
@@ -99,31 +139,12 @@ export function ItemDialog({ item, restaurant, branchId, branchName, onClose }: 
       return
     }
     toast(`${item.name} added`)
-    reset()
     onClose()
     openCart()
   }
 
-  function reset() {
-    setSelected(new Set())
-    setQuantity(1)
-    setConflict(false)
-    setGroupErrors(new Set())
-  }
-
   return (
-    <Modal
-      open={item !== null}
-      onOpenChange={(open) => {
-        if (!open) {
-          reset()
-          onClose()
-        }
-      }}
-      title={item.name}
-      hideTitle
-      shape="center"
-    >
+    <>
       <div className="overflow-y-auto">
         <FoodImage
           src={item.imageUrl ?? null}
@@ -251,6 +272,6 @@ export function ItemDialog({ item, restaurant, branchId, branchName, onClose }: 
           </div>
         )}
       </div>
-    </Modal>
+    </>
   )
 }
