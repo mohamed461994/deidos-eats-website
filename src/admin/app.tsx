@@ -19,6 +19,11 @@ import { paths } from '@/lib/routes'
 import { cn } from '@/lib/utils'
 
 import { DiscountsPage } from './discounts'
+import { BannersPage } from './banners'
+import { BranchesPage } from './branches'
+import { ContentPage } from './content'
+import { OvenPage } from './oven'
+import { RestaurantsPage } from './restaurants'
 
 interface PanelSection {
   label: string
@@ -64,20 +69,6 @@ function AccessDenied() {
         <Button className="mt-6" onClick={() => void leave()}>
           Sign out and use a staff account
         </Button>
-      </div>
-    </main>
-  )
-}
-
-function StubPage({ title }: { title: string }) {
-  return (
-    <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
-      <h1 className="text-2xl font-[700] tracking-[-0.02em]">{title}</h1>
-      <div className="mt-6 rounded-[16px] border border-border bg-bg p-6">
-        <p className="font-[650]">This section is ready in the shell.</p>
-        <p className="mt-1 max-w-[60ch] text-[15px] text-muted">
-          Its content tools are intentionally deferred to Session 7.
-        </p>
       </div>
     </main>
   )
@@ -157,11 +148,11 @@ function PanelShell() {
           <Route path="discounts" element={<DiscountsPage />} />
           {role === 'admin' && (
             <>
-              <Route path="banners" element={<StubPage title="Banners" />} />
-              <Route path="oven" element={<StubPage title="From the oven" />} />
-              <Route path="content" element={<StubPage title="Text & links" />} />
-              <Route path="restaurants" element={<StubPage title="Restaurants" />} />
-              <Route path="branches" element={<StubPage title="Branches" />} />
+              <Route path="banners" element={<BannersPage />} />
+              <Route path="oven" element={<OvenPage />} />
+              <Route path="content" element={<ContentPage />} />
+              <Route path="restaurants" element={<RestaurantsPage />} />
+              <Route path="branches" element={<BranchesPage />} />
             </>
           )}
           <Route path="*" element={<Navigate to={paths.adminDiscounts()} replace />} />

@@ -8,9 +8,18 @@
 import type {
   Address,
   AddressCreate,
+  AdminBanner,
+  AdminBannerCreate,
+  AdminBannerList,
+  AdminBannerUpdate,
   AdminBranch,
+  AdminBranchCreate,
   AdminBranchList,
+  AdminBranchUpdate,
+  AdminRestaurant,
+  AdminRestaurantCreate,
   AdminRestaurantList,
+  AdminRestaurantUpdate,
   Branch,
   CartValidateRequest,
   CheckoutRequest,
@@ -23,6 +32,10 @@ import type {
   MenuCatalogPage,
   MenuItem,
   MenuItemUpdate,
+  OvenFeature,
+  OvenFeatureCreate,
+  OvenFeatureList,
+  OvenFeatureUpdate,
   Order,
   OrderList,
   PricedCart,
@@ -30,6 +43,12 @@ import type {
   Restaurant,
   RestaurantList,
   StaffBranchMembershipList,
+  SiteContentEntry,
+  SiteContentKey,
+  SiteContentList,
+  SiteContentUpdate,
+  ImageUploadRequest,
+  ImageUploadResponse,
   User,
   UserUpdate,
 } from '@/api/types'
@@ -42,6 +61,27 @@ import {
   resetMockAdminForTests,
   updateMockPromo,
 } from './admin'
+import {
+  createAdminBannerForTests,
+  createAdminBranchForTests,
+  createAdminOvenFeatureForTests,
+  createAdminRestaurantForTests,
+  deleteAdminBannerForTests,
+  deleteAdminOvenFeatureForTests,
+  listAdminBannersForTests,
+  listAdminBranchesForTests,
+  listAdminContentForTests,
+  listAdminOvenFeaturesForTests,
+  listAdminRestaurantsForTests,
+  requestAdminImageForTests,
+  resetMockAdminContentForTests,
+  setAdminContentForTests,
+  updateAdminBannerForTests,
+  updateAdminBranchForTests,
+  updateAdminOvenFeatureForTests,
+  updateAdminRestaurantForTests,
+  uploadAdminImageForTests,
+} from './admin-content'
 import {
   activePromoFor,
   allRestaurants,
@@ -178,6 +218,7 @@ export function resetMockApiForTests() {
   mockStore.resetForTests()
   resetMarketplaceForTests()
   resetMockAdminForTests()
+  resetMockAdminContentForTests()
 }
 
 export { bumpMockPromoTokenForTests }
@@ -547,6 +588,12 @@ function requirePromoAccess(branchId: string): User {
   fail(403, 'forbidden', 'You do not have access to this branch.')
 }
 
+function requireAdmin(): User {
+  const user = requireUser()
+  if (user.role !== 'admin') fail(403, 'forbidden', 'Admin access is required.')
+  return user
+}
+
 export async function listMyStaffBranches(): Promise<StaffBranchMembershipList> {
   await delay()
   const user = requireUser()
@@ -572,50 +619,163 @@ export async function listMyStaffBranches(): Promise<StaffBranchMembershipList> 
   }
 }
 
-function adminBranch(branchId: string): AdminBranch | null {
-  const branch = branches[branchId]
-  if (!branch) return null
-  return {
-    ...branch,
-    createdAt: '2026-07-01T09:00:00.000Z',
-    updatedAt: '2026-07-12T09:00:00.000Z',
-  }
-}
-
-export async function listAdminBranches(): Promise<AdminBranchList> {
+export async function listAdminBranches(cursor?: string, restaurantId?: string): Promise<AdminBranchList> {
   await delay()
-  const user = requireUser()
-  if (user.role !== 'admin') fail(403, 'forbidden', 'Admin access is required.')
+  requireAdmin()
+  void cursor
   return {
-    items: Object.keys(branches).flatMap((branchId) => {
-      const branch = adminBranch(branchId)
-      return branch ? [branch] : []
-    }),
+    items: listAdminBranchesForTests(restaurantId),
     pageInfo: { nextCursor: null },
   }
 }
 
-export async function listAdminRestaurants(): Promise<AdminRestaurantList> {
+export async function listAdminRestaurants(cursor?: string): Promise<AdminRestaurantList> {
   await delay()
-  const user = requireUser()
-  if (user.role !== 'admin') fail(403, 'forbidden', 'Admin access is required.')
+  requireAdmin()
+  void cursor
   return {
-    items: allRestaurants.map((restaurant) => ({
-      id: restaurant.id,
-      slug: restaurant.slug,
-      name: restaurant.name,
-      description: restaurant.description ?? null,
-      tagline: restaurant.tagline ?? null,
-      logoUrl: restaurant.logoUrl ?? null,
-      heroImageUrl: restaurant.heroImageUrl ?? null,
-      heroImageAlt: restaurant.heroImageAlt ?? null,
-      lifecycleStatus: 'published' as const,
-      isPaused: restaurant.marketplaceStatus === 'paused',
-      createdAt: '2026-07-01T09:00:00.000Z',
-      updatedAt: '2026-07-12T09:00:00.000Z',
-    })),
+    items: listAdminRestaurantsForTests(),
     pageInfo: { nextCursor: null },
   }
+}
+
+export async function listAdminBanners(cursor?: string): Promise<AdminBannerList> {
+  await delay()
+  requireAdmin()
+  void cursor
+  return { items: listAdminBannersForTests(), pageInfo: { nextCursor: null } }
+}
+
+export async function createAdminBanner(input: AdminBannerCreate): Promise<AdminBanner> {
+  await delay()
+  requireAdmin()
+  return createAdminBannerForTests(input)
+}
+
+export async function updateAdminBanner(
+  bannerId: string,
+  input: AdminBannerUpdate,
+  expectedUpdatedAt?: string,
+): Promise<AdminBanner> {
+  await delay()
+  requireAdmin()
+  return updateAdminBannerForTests(bannerId, input, expectedUpdatedAt)
+}
+
+export async function deleteAdminBanner(bannerId: string): Promise<void> {
+  await delay()
+  requireAdmin()
+  deleteAdminBannerForTests(bannerId)
+}
+
+export async function requestAdminBannerImage(input: ImageUploadRequest): Promise<ImageUploadResponse> {
+  await delay()
+  requireAdmin()
+  return requestAdminImageForTests('banners', input)
+}
+
+export async function listAdminOvenFeatures(
+  cursor?: string,
+  branchId?: string,
+): Promise<OvenFeatureList> {
+  await delay()
+  requireAdmin()
+  void cursor
+  return { items: listAdminOvenFeaturesForTests(branchId), pageInfo: { nextCursor: null } }
+}
+
+export async function createAdminOvenFeature(input: OvenFeatureCreate): Promise<OvenFeature> {
+  await delay()
+  requireAdmin()
+  return createAdminOvenFeatureForTests(input)
+}
+
+export async function updateAdminOvenFeature(
+  featureId: string,
+  input: OvenFeatureUpdate,
+  expectedUpdatedAt?: string,
+): Promise<OvenFeature> {
+  await delay()
+  requireAdmin()
+  return updateAdminOvenFeatureForTests(featureId, input, expectedUpdatedAt)
+}
+
+export async function deleteAdminOvenFeature(featureId: string): Promise<void> {
+  await delay()
+  requireAdmin()
+  deleteAdminOvenFeatureForTests(featureId)
+}
+
+export async function listAdminContent(): Promise<SiteContentList> {
+  await delay()
+  requireAdmin()
+  return { items: listAdminContentForTests() }
+}
+
+export async function setAdminContent(
+  key: SiteContentKey,
+  input: SiteContentUpdate,
+  expectedUpdatedAt?: string,
+): Promise<SiteContentEntry> {
+  await delay()
+  requireAdmin()
+  return setAdminContentForTests(key, input, expectedUpdatedAt)
+}
+
+export async function createAdminRestaurant(
+  input: AdminRestaurantCreate,
+): Promise<AdminRestaurant> {
+  await delay()
+  requireAdmin()
+  return createAdminRestaurantForTests(input)
+}
+
+export async function updateAdminRestaurant(
+  restaurantId: string,
+  input: AdminRestaurantUpdate,
+  expectedUpdatedAt?: string,
+): Promise<AdminRestaurant> {
+  await delay()
+  requireAdmin()
+  return updateAdminRestaurantForTests(restaurantId, input, expectedUpdatedAt)
+}
+
+export async function requestAdminRestaurantImage(
+  restaurantId: string,
+  input: ImageUploadRequest,
+): Promise<ImageUploadResponse> {
+  await delay()
+  requireAdmin()
+  return requestAdminImageForTests(`restaurants/${restaurantId}`, input)
+}
+
+export async function createAdminBranch(input: AdminBranchCreate): Promise<AdminBranch> {
+  await delay()
+  requireAdmin()
+  return createAdminBranchForTests(input)
+}
+
+export async function updateAdminBranch(
+  branchId: string,
+  input: AdminBranchUpdate,
+  expectedUpdatedAt?: string,
+): Promise<AdminBranch> {
+  await delay()
+  requireAdmin()
+  return updateAdminBranchForTests(branchId, input, expectedUpdatedAt)
+}
+
+export async function requestAdminBranchImage(
+  branchId: string,
+  input: ImageUploadRequest,
+): Promise<ImageUploadResponse> {
+  await delay()
+  requireAdmin()
+  return requestAdminImageForTests(`branches/${branchId}`, input)
+}
+
+export async function uploadAdminImage(): Promise<void> {
+  await uploadAdminImageForTests()
 }
 
 export async function getStaffBranchMenuCatalog(

@@ -2,7 +2,16 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api } from '@/api'
 import { adminApi } from '@/api/admin-api'
-import type { MenuCatalogItem, MenuItemUpdate, User } from '@/api/types'
+import type {
+  AdminBanner,
+  AdminBranch,
+  AdminRestaurant,
+  MenuCatalogItem,
+  MenuItemUpdate,
+  OvenFeature,
+  SiteContentEntry,
+  User,
+} from '@/api/types'
 
 export interface AccessibleBranch {
   id: string
@@ -14,6 +23,11 @@ export interface AccessibleBranch {
 
 export const adminQueryKeys = {
   branches: (role: User['role'] | null) => ['admin', 'branches', role] as const,
+  adminBranches: ['admin', 'all-branches'] as const,
+  restaurants: ['admin', 'restaurants'] as const,
+  banners: ['admin', 'banners'] as const,
+  ovenFeatures: ['admin', 'oven-features'] as const,
+  content: ['admin', 'content'] as const,
   catalog: (branchId: string) => ['admin', 'promo-catalog', branchId] as const,
 }
 
@@ -110,5 +124,72 @@ export function useUpdatePromo(branchId: string | null) {
         refetchType: 'active',
       })
     },
+  })
+}
+
+async function allAdminRestaurants(): Promise<AdminRestaurant[]> {
+  const items: AdminRestaurant[] = []
+  let cursor: string | undefined
+  do {
+    const page = await adminApi.listAdminRestaurants(cursor)
+    items.push(...page.items)
+    cursor = page.pageInfo.nextCursor ?? undefined
+  } while (cursor)
+  return items
+}
+
+async function allAdminBranchesForPanel(): Promise<AdminBranch[]> {
+  const items: AdminBranch[] = []
+  let cursor: string | undefined
+  do {
+    const page = await adminApi.listAdminBranches(cursor)
+    items.push(...page.items)
+    cursor = page.pageInfo.nextCursor ?? undefined
+  } while (cursor)
+  return items
+}
+
+async function allAdminBanners(): Promise<AdminBanner[]> {
+  const items: AdminBanner[] = []
+  let cursor: string | undefined
+  do {
+    const page = await adminApi.listAdminBanners(cursor)
+    items.push(...page.items)
+    cursor = page.pageInfo.nextCursor ?? undefined
+  } while (cursor)
+  return items
+}
+
+async function allAdminOvenFeatures(): Promise<OvenFeature[]> {
+  const items: OvenFeature[] = []
+  let cursor: string | undefined
+  do {
+    const page = await adminApi.listAdminOvenFeatures(cursor)
+    items.push(...page.items)
+    cursor = page.pageInfo.nextCursor ?? undefined
+  } while (cursor)
+  return items
+}
+
+export function useAdminRestaurants() {
+  return useQuery({ queryKey: adminQueryKeys.restaurants, queryFn: allAdminRestaurants })
+}
+
+export function useAdminBranches() {
+  return useQuery({ queryKey: adminQueryKeys.adminBranches, queryFn: allAdminBranchesForPanel })
+}
+
+export function useAdminBanners() {
+  return useQuery({ queryKey: adminQueryKeys.banners, queryFn: allAdminBanners })
+}
+
+export function useAdminOvenFeatures() {
+  return useQuery({ queryKey: adminQueryKeys.ovenFeatures, queryFn: allAdminOvenFeatures })
+}
+
+export function useAdminContent() {
+  return useQuery<SiteContentEntry[]>({
+    queryKey: adminQueryKeys.content,
+    queryFn: async () => (await adminApi.listAdminContent()).items,
   })
 }

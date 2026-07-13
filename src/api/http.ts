@@ -13,7 +13,7 @@ export function setAccessTokenProvider(provider: TokenProvider) {
 }
 
 interface RequestOptions {
-  method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
   body?: unknown
   /** Attach the bearer token (default true; public browse endpoints pass false). */
   auth?: boolean
