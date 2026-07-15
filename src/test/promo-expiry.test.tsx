@@ -48,7 +48,7 @@ describe('menu was/now at the promo boundary', () => {
     await advance(1200)
 
     const tile = screen
-      .getByRole('button', { name: /the house special, now €11\.50, was €14\.50/i })
+      .getByRole('button', { name: /the house special, was €14\.50, now €11\.50/i })
     expect(tile).toBeInTheDocument()
 
     // Cross the boundary: the hook invalidates, the refetch reprices at base.

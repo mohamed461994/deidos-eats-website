@@ -57,6 +57,9 @@ function parseStored(raw: string): HomeLocation | null {
 }
 
 let memoryFallback: string | null = null
+// True after a write that storage swallowed (quota/denied): reads then serve
+// the in-memory value, or the pick would silently vanish while reads "work".
+let storageWriteFailed = false
 // Cache keyed by raw string so getSnapshot returns a stable reference.
 let cachedRaw: string | null = null
 let cachedLocation: HomeLocation | null = null
@@ -64,6 +67,7 @@ let cachedLocation: HomeLocation | null = null
 const listeners = new Set<() => void>()
 
 function readRaw(): string | null {
+  if (storageWriteFailed) return memoryFallback
   try {
     return localStorage.getItem(HOME_LOCATION_KEY)
   } catch {
@@ -83,8 +87,12 @@ function readLocation(): HomeLocation | null {
 // fallback set first keeps this session's pick when storage is blocked.
 function write(raw: string | null) {
   memoryFallback = raw
-  if (raw === null) safeRemove(HOME_LOCATION_KEY)
-  else safeSet(HOME_LOCATION_KEY, raw)
+  if (raw === null) {
+    safeRemove(HOME_LOCATION_KEY)
+    storageWriteFailed = false
+  } else {
+    storageWriteFailed = !safeSet(HOME_LOCATION_KEY, raw)
+  }
   listeners.forEach((listener) => listener())
 }
 

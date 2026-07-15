@@ -15,7 +15,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useCart } from '@/cart/context'
 import { useRememberedBranch } from '@/lib/branch-selection'
-import { formatCents } from '@/lib/money'
+import { formatCents, wasNowLabel } from '@/lib/money'
 import { paths } from '@/lib/routes'
 import { cn } from '@/lib/utils'
 
@@ -227,7 +227,7 @@ export function MenuPage() {
                       className="group w-full text-left disabled:cursor-not-allowed"
                       aria-label={`${item.name}, ${
                         item.onlinePromoPriceCents != null
-                          ? `now ${formatCents(item.onlinePromoPriceCents)}, was ${formatCents(item.priceCents)}`
+                          ? wasNowLabel(item.priceCents, item.onlinePromoPriceCents)
                           : formatCents(item.priceCents)
                       }${item.isAvailable ? '' : ', sold out'}`}
                     >

@@ -5,31 +5,22 @@
  * scope itself to the cart's restaurant.
  */
 import { cleanup, render, screen } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import App from '@/App'
+import { resetMockApiForTests } from '@/api/mock/api'
 import { DUBLIN_BRANCH_ID, RESTAURANT_A_ID } from '@/api/mock/data'
-import { mockStore } from '@/api/mock/store'
 import { mockAuthProvider } from '@/auth/mock'
 import { V2_CART_KEY } from '@/cart/storage'
 
-class IO {
-  observe() {}
-  unobserve() {}
-  disconnect() {}
-  takeRecords() {
-    return []
-  }
-}
-vi.stubGlobal('IntersectionObserver', IO)
-window.scrollTo = () => {}
+// jsdom stubs (IntersectionObserver, scrollTo, scrollIntoView) live in setup.ts.
 
 const EMAIL = 'buyer@example.ie'
 const PASSWORD = 'a-long-password!'
 
 beforeEach(async () => {
   localStorage.clear()
-  mockStore.resetForTests()
+  resetMockApiForTests()
   await mockAuthProvider.signUp(EMAIL, PASSWORD, 'Test Buyer')
   await mockAuthProvider.confirmSignUp(EMAIL, '123456')
   await mockAuthProvider.signIn(EMAIL, PASSWORD)

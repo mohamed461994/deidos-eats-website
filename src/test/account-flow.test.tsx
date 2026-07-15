@@ -5,21 +5,11 @@
  * signup → confirm → auto sign-in → /account.
  */
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import App from '@/App'
 
-// jsdom lacks IntersectionObserver (menu page) and scrollTo is a no-op stub.
-class IO {
-  observe() {}
-  unobserve() {}
-  disconnect() {}
-  takeRecords() {
-    return []
-  }
-}
-vi.stubGlobal('IntersectionObserver', IO)
-window.scrollTo = () => {}
+// jsdom stubs (IntersectionObserver, scrollTo, scrollIntoView) live in setup.ts.
 
 const EMAIL = 'sean.murphy@example.ie'
 const PASSWORD = 'a-long-password!'

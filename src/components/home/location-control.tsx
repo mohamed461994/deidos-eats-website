@@ -24,7 +24,7 @@ interface LocationControlProps {
 }
 
 export function LocationControl({ location, towns }: LocationControlProps) {
-  const { locate, locating, geoNote, clearGeoNote } = useGeolocate()
+  const { locate, cancel, locating, geoNote, clearGeoNote } = useGeolocate()
   const selectId = useId()
 
   function requestLocation() {
@@ -45,6 +45,8 @@ export function LocationControl({ location, towns }: LocationControlProps) {
   function pickTown(townName: string) {
     const town = towns.find((t) => t.town === townName)
     if (!town) return
+    // An explicit town pick wins over any still-pending geolocation fix.
+    cancel()
     clearGeoNote()
     setHomeLocation({
       kind: 'town',

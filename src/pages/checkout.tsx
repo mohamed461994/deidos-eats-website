@@ -1,5 +1,5 @@
 import { Bike, Clock, MapPin, ShoppingBag } from 'lucide-react'
-import { lazy, Suspense, useRef, useState } from 'react'
+import { lazy, Suspense, useMemo, useRef, useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 
 import { api, errorMessage, isRestaurantUnavailableError } from '@/api'
@@ -35,7 +35,7 @@ type PaymentMethod = 'card' | 'cash'
 
 export function CheckoutPage() {
   const { status } = useAuth()
-  const { cart, lineInputs, subtotalCents, clearCart, itemCount } = useCart()
+  const { cart, lineInputs, clearCart, itemCount } = useCart()
   const { toast } = useToast()
   const navigate = useNavigate()
   const branchQuery = useBranch(cart.branchId)
@@ -102,7 +102,10 @@ export function CheckoutPage() {
   // we never silently charge more than we showed. Acceptance is pinned to the
   // exact quote (inputs + total); any change re-requires it.
   const [acceptedQuoteKey, setAcceptedQuoteKey] = useState<string | null>(null)
-  const quoteComparison = priced ? compareQuoteToBasket(cart, priced) : null
+  const quoteComparison = useMemo(
+    () => (priced ? compareQuoteToBasket(cart, priced) : null),
+    [cart, priced],
+  )
   const repricedUp = quoteComparison?.repricedUp ?? false
   const quoteKey = priced ? `${quoteSignature}|${priced.totalCents}` : null
   const needsPriceConfirm = repricedUp && acceptedQuoteKey !== quoteKey
@@ -661,8 +664,10 @@ export function CheckoutPage() {
                   {formatCents(priced.subtotalCents)}
                 </strong>{' '}
                 — your basket showed{' '}
-                <s className="tabular-nums">{formatCents(subtotalCents)}</s>. Accept the new
-                total below, or edit your cart.
+                <s className="tabular-nums">
+                  {formatCents(quoteComparison!.displayedSubtotalCents)}
+                </s>
+                . Accept the new total below, or edit your cart.
               </p>
             </div>
           )}

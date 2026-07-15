@@ -9,12 +9,13 @@ import { config } from '@/config'
 export type AvailabilityTone = 'open' | 'partial' | 'closed' | 'comingSoon' | 'paused' | 'none'
 
 /**
- * Marketplace-status copy shared by restaurant cards and branch cards, so the
- * same status never reads differently on two surfaces.
+ * Marketplace-status presentation shared by restaurant cards and branch cards,
+ * so the same status never reads (or colors) differently on two surfaces.
+ * `variant` is a Badge variant name.
  */
-export const STATUS_LABELS = {
-  comingSoon: 'Coming soon',
-  paused: 'Not taking orders',
+export const STATUS_BADGES = {
+  comingSoon: { label: 'Coming soon', variant: 'crust' },
+  paused: { label: 'Not taking orders', variant: 'neutral' },
 } as const
 
 /**
@@ -41,9 +42,9 @@ export function openBranchCount(restaurant: Pick<Restaurant, 'branches'>): numbe
 
 export function availabilityOf(restaurant: Restaurant): Availability {
   if (restaurant.marketplaceStatus === 'comingSoon')
-    return { label: STATUS_LABELS.comingSoon, tone: 'comingSoon', canOrderNow: false }
+    return { label: STATUS_BADGES.comingSoon.label, tone: 'comingSoon', canOrderNow: false }
   if (restaurant.marketplaceStatus === 'paused')
-    return { label: STATUS_LABELS.paused, tone: 'paused', canOrderNow: false }
+    return { label: STATUS_BADGES.paused.label, tone: 'paused', canOrderNow: false }
 
   const total = restaurant.branches.length
   if (total === 0) return { label: 'No locations yet', tone: 'none', canOrderNow: false }

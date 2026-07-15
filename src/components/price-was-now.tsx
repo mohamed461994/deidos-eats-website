@@ -1,15 +1,16 @@
 /**
- * The one way a discounted online price is rendered — home strips, menu tiles,
- * and the item dialog all use this, so "was/now" can never drift between
- * surfaces. `baseCents` is ALWAYS the base price (`MenuItem.priceCents`) and
- * `promoCents` the active `onlinePromoPriceCents`; the charged price is the
- * server's business, this is display.
+ * The one way a DISCOUNTED online price is rendered — home strips, menu tiles,
+ * and the item dialog all use this when a promo is active, so "was/now" can
+ * never drift between surfaces (call sites keep their own plain-price styling
+ * for the no-promo case). `baseCents` is ALWAYS the base price
+ * (`MenuItem.priceCents`) and `promoCents` the active `onlinePromoPriceCents`;
+ * the charged price is the server's business, this is display.
  *
  * The "now" price stays ink (money must always be readable — ember fails AA at
  * price sizes); the heat comes from the strike + the optional savings badge.
  */
 import { Badge } from '@/components/ui/badge'
-import { formatCents } from '@/lib/money'
+import { formatCents, wasNowLabel } from '@/lib/money'
 import { cn } from '@/lib/utils'
 
 interface PriceWasNowProps {
@@ -23,9 +24,7 @@ interface PriceWasNowProps {
 export function PriceWasNow({ baseCents, promoCents, showSaving = false, className }: PriceWasNowProps) {
   return (
     <span className={cn('inline-flex flex-wrap items-baseline gap-x-1.5 gap-y-1', className)}>
-      <span className="sr-only">
-        Was {formatCents(baseCents)}, now {formatCents(promoCents)}
-      </span>
+      <span className="sr-only">{wasNowLabel(baseCents, promoCents)}</span>
       <s aria-hidden className="tabular-nums text-[13px] text-muted">
         {formatCents(baseCents)}
       </s>

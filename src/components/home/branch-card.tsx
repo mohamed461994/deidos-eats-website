@@ -17,7 +17,7 @@ import type { MarketplaceBranch, Restaurant } from '@/api/types'
 import { FoodImage } from '@/components/food-image'
 import { Badge } from '@/components/ui/badge'
 import { formatKm } from '@/lib/distance'
-import { STATUS_LABELS } from '@/lib/restaurant'
+import { STATUS_BADGES } from '@/lib/restaurant'
 import { paths } from '@/lib/routes'
 import { cn } from '@/lib/utils'
 
@@ -35,11 +35,10 @@ interface BranchCardProps {
 }
 
 function AvailabilityLine({ branch, brand }: BranchCardProps) {
-  if (brand?.marketplaceStatus === 'comingSoon') {
-    return <Badge variant="crust">{STATUS_LABELS.comingSoon}</Badge>
-  }
-  if (brand?.marketplaceStatus === 'paused') {
-    return <Badge variant="neutral">{STATUS_LABELS.paused}</Badge>
+  const status = brand?.marketplaceStatus
+  if (status === 'comingSoon' || status === 'paused') {
+    const badge = STATUS_BADGES[status]
+    return <Badge variant={badge.variant}>{badge.label}</Badge>
   }
   return (
     <span

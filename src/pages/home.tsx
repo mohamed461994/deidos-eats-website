@@ -40,31 +40,38 @@ export function HomePage() {
   const located = location !== null
 
   // Restaurant branding joined onto branch cards (logo, imagery, precise
-  // status), precomputed per branch so memoized cards get stable props.
-  const brandByBranchId = useMemo(() => {
-    const map = new Map<string, BranchBrand>()
+  // status), precomputed per branch so memoized cards get stable props. The
+  // slug-level entry is the fallback for a feed branch the (staler)
+  // restaurants cache doesn't know yet — it still gets its restaurant's hero,
+  // logo, and paused/comingSoon badge instead of a bare "Closed" card.
+  const brandJoin = useMemo(() => {
+    const byBranchId = new Map<string, BranchBrand>()
+    const bySlug = new Map<string, BranchBrand>()
     for (const restaurant of restaurants ?? []) {
+      const restaurantBrand: BranchBrand = {
+        logoUrl: restaurant.logoUrl ?? null,
+        imageUrl: restaurant.heroImageUrl ?? null,
+        marketplaceStatus: restaurant.marketplaceStatus,
+      }
+      bySlug.set(restaurant.slug, restaurantBrand)
       for (const branch of restaurant.branches) {
-        map.set(branch.id, {
-          logoUrl: restaurant.logoUrl ?? null,
-          imageUrl: branch.imageUrl ?? restaurant.heroImageUrl ?? null,
-          marketplaceStatus: restaurant.marketplaceStatus,
+        byBranchId.set(branch.id, {
+          ...restaurantBrand,
+          imageUrl: branch.imageUrl ?? restaurantBrand.imageUrl,
         })
       }
     }
-    return map
+    return { byBranchId, bySlug }
   }, [restaurants])
 
   // Town picker options: the feed carries every published branch with coords
   // today; the restaurants query is merged in so the list stays complete even
   // if the feed is ever capped (it self-heals as BranchSummary coords ship).
+  const feedBranches = home?.branches.items
   const towns = useMemo(
     () =>
-      townOptions([
-        ...(home?.branches.items ?? []),
-        ...(restaurants ?? []).flatMap((r) => r.branches),
-      ]),
-    [home, restaurants],
+      townOptions([...(feedBranches ?? []), ...(restaurants ?? []).flatMap((r) => r.branches)]),
+    [feedBranches, restaurants],
   )
 
   // Rollback pin: behave as a single-restaurant site when a restaurant is pinned.
@@ -154,7 +161,13 @@ export function HomePage() {
                     className="rise-in flex"
                     style={{ animationDelay: staggerDelayMs(index) }}
                   >
-                    <BranchCard branch={branch} brand={brandByBranchId.get(branch.id)} />
+                    <BranchCard
+                      branch={branch}
+                      brand={
+                        brandJoin.byBranchId.get(branch.id) ??
+                        brandJoin.bySlug.get(branch.restaurantSlug)
+                      }
+                    />
                   </li>
                 ))}
               </ul>

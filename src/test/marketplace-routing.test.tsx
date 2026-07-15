@@ -6,23 +6,12 @@
  * Drives the REAL <App/> (router, providers, pages).
  */
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import App from '@/App'
 import { DUBLIN_BRANCH_ID } from '@/api/mock/data'
 
-// jsdom lacks IntersectionObserver (menu scrollspy); scrollTo is a no-op stub.
-class IO {
-  observe() {}
-  unobserve() {}
-  disconnect() {}
-  takeRecords() {
-    return []
-  }
-}
-vi.stubGlobal('IntersectionObserver', IO)
-window.scrollTo = () => {}
-Element.prototype.scrollIntoView = () => {}
+// jsdom stubs (IntersectionObserver, scrollTo, scrollIntoView) live in setup.ts.
 
 function renderAt(path: string) {
   window.history.pushState({}, '', path)
