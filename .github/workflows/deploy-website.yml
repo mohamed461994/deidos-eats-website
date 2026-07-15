@@ -52,19 +52,30 @@ jobs:
       # Check both repos out as siblings under the workspace so the website's
       # `file:../deidos-eats-contracts` dependency and its Vite alias resolve
       # exactly as they do on a local dev machine.
-      - name: Check out website
-        uses: actions/checkout@v4
-        with:
-          path: deidos-eats-website
-
       # deidos-eats-contracts is a PRIVATE repo, so the default GITHUB_TOKEN
       # (scoped to this repo only) cannot read it. ONE-TIME SETUP: create a
       # fine-grained PAT (or GitHub App token) with read-only "Contents" on
       # deidos-eats-contracts and store it as the repo secret CONTRACTS_READ_TOKEN
-      # (Settings → Secrets and variables → Actions → Secrets). Without it this
-      # step fails and the build cannot resolve `@deidos-eats/contracts`.
+      # (Settings → Secrets and variables → Actions → Secrets). This guard fails
+      # fast with a clear message if it is missing (otherwise the contracts
+      # checkout dies with a cryptic "Input required and not supplied: token").
+      - name: Verify contracts token secret is set
+        shell: bash
+        env:
+          CONTRACTS_READ_TOKEN: ${{ secrets.CONTRACTS_READ_TOKEN }}
+        run: |
+          if [ -z "${CONTRACTS_READ_TOKEN}" ]; then
+            echo "::error::Missing secret CONTRACTS_READ_TOKEN. Create a fine-grained PAT with read-only 'Contents' on deidos-eats-contracts and add it as an Actions secret named CONTRACTS_READ_TOKEN (Settings -> Secrets and variables -> Actions). See this workflow's header comment."
+            exit 1
+          fi
+
+      - name: Check out website
+        uses: actions/checkout@v5
+        with:
+          path: deidos-eats-website
+
       - name: Check out contracts
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: ${{ github.repository_owner }}/deidos-eats-contracts
           ref: ${{ inputs.contracts_ref }}
@@ -72,7 +83,7 @@ jobs:
           token: ${{ secrets.CONTRACTS_READ_TOKEN }}
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
