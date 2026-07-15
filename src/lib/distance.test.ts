@@ -25,10 +25,15 @@ describe('haversineKm', () => {
 describe('formatKm', () => {
   it('shows one decimal below 10 km and whole km at/above', () => {
     expect(formatKm(2.14)).toBe('2.1 km')
-    expect(formatKm(0)).toBe('0 km')
     expect(formatKm(9.94)).toBe('9.9 km')
     expect(formatKm(219.3)).toBe('219 km')
     expect(formatKm(10)).toBe('10 km')
+  })
+
+  it('never shows a bogus "0 km" up close (town picks sit exactly on branch coords)', () => {
+    expect(formatKm(0)).toBe('< 1 km')
+    expect(formatKm(0.04)).toBe('< 1 km')
+    expect(formatKm(0.94)).toBe('< 1 km')
   })
 })
 

@@ -49,6 +49,28 @@ function fail(status: number, code: string, message: string, details?: Record<st
   throw new ApiError(status, { code, message, ...(details ? { details } : {}) })
 }
 
+/**
+ * Mirrors the live API's fulfillment write path: null is rejected for the tiered fields, and
+ * omitting them resets to the server defaults (5 km base, flat fee) instead of preserving the
+ * stored values. Keeping that behavior here lets tests catch saves that would wipe tiered pricing.
+ */
+function resolveFulfillment(input: AdminBranchCreate['fulfillment']): AdminBranch['fulfillment'] {
+  if (input && (input.deliveryBaseRadiusKm === null || input.deliveryPerKmCents === null)) {
+    fail(422, 'validation_failed', 'deliveryBaseRadiusKm and deliveryPerKmCents cannot be null.')
+  }
+  const collectionEnabled = input?.collectionEnabled ?? true
+  const deliveryEnabled = input?.deliveryEnabled ?? false
+  return {
+    collectionEnabled,
+    deliveryEnabled,
+    deliveryFeeCents: deliveryEnabled ? (input?.deliveryFeeCents ?? 0) : 0,
+    minOrderCents: deliveryEnabled ? (input?.minOrderCents ?? null) : null,
+    deliveryRadiusKm: deliveryEnabled ? (input?.deliveryRadiusKm ?? null) : null,
+    deliveryBaseRadiusKm: deliveryEnabled ? (input?.deliveryBaseRadiusKm ?? 5) : 5,
+    deliveryPerKmCents: deliveryEnabled ? (input?.deliveryPerKmCents ?? 0) : 0,
+  }
+}
+
 function cloneBranch(branch: AdminBranch): AdminBranch {
   return {
     ...branch,
@@ -382,15 +404,7 @@ export function createAdminBranchForTests(input: AdminBranchCreate): AdminBranch
     },
     timezone: input.timezone,
     isOpen: true,
-    fulfillment: input.fulfillment ?? {
-      collectionEnabled: true,
-      deliveryEnabled: false,
-      deliveryFeeCents: null,
-      minOrderCents: null,
-      deliveryRadiusKm: null,
-      deliveryBaseRadiusKm: null,
-      deliveryPerKmCents: null,
-    },
+    fulfillment: resolveFulfillment(input.fulfillment),
     payment: input.payment ?? { cashEnabled: false },
     pos: input.pos ?? {
       deliveryAddressAutocompleteEnabled: false,
@@ -414,6 +428,7 @@ export function updateAdminBranchForTests(
   const next = cloneBranch({
     ...current,
     ...input,
+    ...(input.fulfillment !== undefined ? { fulfillment: resolveFulfillment(input.fulfillment) } : {}),
     ...(input.imageObjectKey !== undefined ? { imageUrl: imageUrl(input.imageObjectKey) } : {}),
     updatedAt: timestamp(),
   })

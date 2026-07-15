@@ -29,7 +29,9 @@ function BannerShell({
       </Link>
     )
   }
-  if (linkUrl) {
+  // Fail closed on anything but https: a stored javascript:/data: URL must never become a live
+  // href on the buyer home, even though the admin form and API both reject such values.
+  if (linkUrl && linkUrl.startsWith('https://')) {
     return (
       <a href={linkUrl} target="_blank" rel="noreferrer" className={className}>
         {children}
@@ -55,14 +57,18 @@ function BannerCard({ banner, solo }: { banner: MarketplaceBanner; solo: boolean
             src={banner.imageUrl}
             alt=""
             loading="lazy"
-            className="aspect-[5/2] w-full bg-surface object-cover transition-transform duration-500 ease-(--ease-out) group-hover:scale-[1.02] motion-reduce:transition-none sm:aspect-[3/1]"
+            className="absolute inset-0 size-full bg-surface object-cover transition-transform duration-500 ease-(--ease-out) group-hover:scale-[1.02] motion-reduce:transition-none"
           />
           {/* Scrim so paper text holds ≥4.5:1 on any photo. */}
           <div
             aria-hidden
             className="absolute inset-0 bg-gradient-to-t from-black/72 via-black/25 to-transparent"
           />
-          <div className="absolute inset-x-0 bottom-0 p-5 sm:p-7">
+          {/* The caption is the in-flow box: the aspect ratio sets the card's
+              shape, but long admin copy grows the card instead of clipping off
+              the top (it did, on ≤320px screens, when the image owned the
+              ratio and the text was absolutely positioned). */}
+          <div className="relative flex aspect-[5/2] flex-col justify-end p-5 sm:aspect-[3/1] sm:p-7">
             <h3 className="display text-xl text-white sm:text-2xl">{banner.title}</h3>
             {banner.body && (
               <p className="mt-1 max-w-[60ch] text-[15px] text-white/85">{banner.body}</p>
@@ -86,7 +92,9 @@ export function BannerStrip({ banners }: { banners: MarketplaceBanner[] }) {
       {banners.length === 1 ? (
         <BannerCard banner={banners[0]} solo />
       ) : (
-        <div className="-mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:px-6">
+        // scroll-padding mirrors the inline padding — mandatory snap would
+        // otherwise pin banners to the screen edge (see item-strip.tsx).
+        <div className="-mx-4 flex snap-x snap-mandatory scroll-pl-4 gap-4 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:scroll-pl-6 sm:px-6">
           {banners.map((banner) => (
             <BannerCard key={banner.id} banner={banner} solo={false} />
           ))}

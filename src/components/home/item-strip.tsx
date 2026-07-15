@@ -97,7 +97,10 @@ export function ItemStrip({
         {titleAccent}
       </div>
       {subtitle && <p className="mt-1 text-[15px] text-muted">{subtitle}</p>}
-      <ul className="-mx-4 mt-5 flex snap-x gap-5 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:px-6">
+      {/* Full-bleed scroller: scroll-padding mirrors the inline padding so
+          snapped cards rest at the content inset, never flush with the screen
+          edge (without it the browser snaps the first card to x=0 on load). */}
+      <ul className="-mx-4 mt-5 flex snap-x scroll-pl-4 gap-5 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:scroll-pl-6 sm:px-6">
         {items.map((item, index) => (
           <ItemCard
             key={`${item.branchId}-${item.itemId}`}

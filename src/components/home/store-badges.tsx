@@ -9,10 +9,22 @@ import { Apple, Play } from 'lucide-react'
 import type { MarketplaceContent } from '@/api/types'
 
 export function StoreBadges({ content }: { content: MarketplaceContent }) {
+  // Each store's own call-to-action phrasing — "Get it on the App Store" is
+  // neither store's wording and reads as a mistake.
   const badges = [
-    content.appStoreUrl && { url: content.appStoreUrl, icon: Apple, store: 'App Store' },
-    content.playStoreUrl && { url: content.playStoreUrl, icon: Play, store: 'Google Play' },
-  ].filter(Boolean) as Array<{ url: string; icon: typeof Apple; store: string }>
+    content.appStoreUrl && {
+      url: content.appStoreUrl,
+      icon: Apple,
+      store: 'App Store',
+      lead: 'Download on the',
+    },
+    content.playStoreUrl && {
+      url: content.playStoreUrl,
+      icon: Play,
+      store: 'Google Play',
+      lead: 'Get it on',
+    },
+  ].filter(Boolean) as Array<{ url: string; icon: typeof Apple; store: string; lead: string }>
 
   if (badges.length === 0) return null
 
@@ -28,7 +40,7 @@ export function StoreBadges({ content }: { content: MarketplaceContent }) {
         </p>
       </div>
       <div className="flex flex-wrap gap-3">
-        {badges.map(({ url, icon: Icon, store }) => (
+        {badges.map(({ url, icon: Icon, store, lead }) => (
           <a
             key={store}
             href={url}
@@ -38,7 +50,7 @@ export function StoreBadges({ content }: { content: MarketplaceContent }) {
           >
             <Icon className="size-5" aria-hidden />
             <span className="text-left leading-tight">
-              <span className="block text-[11px] opacity-75">Get it on the</span>
+              <span className="block text-[11px] opacity-75">{lead}</span>
               <span className="block text-[15px] font-[650]">{store}</span>
             </span>
           </a>

@@ -60,22 +60,29 @@ export function LocationControl({ location, towns }: LocationControlProps) {
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-3">
         {location ? (
-          <p className="flex items-center gap-2 rounded-full bg-paper/12 px-4 py-2 text-[15px] font-[550] text-paper">
+          // min-h matches the 44px "Use my location" button this pill replaces,
+          // so locating never shifts the hero. The clear button's hit area is
+          // padded out (negative margins keep the pill visually unchanged).
+          <p className="flex min-h-11 items-center gap-2 rounded-full bg-paper/12 px-4 py-2 text-[15px] font-[550] text-paper">
             <MapPin className="size-4 shrink-0" aria-hidden />
             {location.kind === 'town' ? `Near ${location.town}` : 'Near you'}
-            <span className="font-[400] text-paper-muted">· closest kitchens first</span>
+            {/* The feed's own subtitle explains the sort on small screens —
+                repeating it here would wrap the pill to two cramped lines. */}
+            <span className="hidden font-[400] text-paper-muted sm:inline">
+              · closest kitchens first
+            </span>
             <button
               type="button"
               onClick={() => clearHomeLocation()}
               aria-label="Clear location"
-              className="-mr-1 rounded-full p-1 transition-colors hover:bg-paper/15"
+              className="-my-2 -mr-2 rounded-full p-2 transition-colors hover:bg-paper/15"
             >
               <X className="size-4" aria-hidden />
             </button>
           </p>
         ) : (
           <>
-            <Button variant="paper" size="sm" loading={locating} onClick={requestLocation}>
+            <Button variant="paper" loading={locating} onClick={requestLocation}>
               <LocateFixed className="size-4" aria-hidden />
               Use my location
             </Button>
@@ -88,7 +95,7 @@ export function LocationControl({ location, towns }: LocationControlProps) {
                   id={selectId}
                   value=""
                   onChange={(e) => pickTown(e.target.value)}
-                  className="h-9 rounded-full border border-paper/30 bg-transparent px-4 text-sm font-[550] text-paper focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ember"
+                  className="h-11 rounded-full border border-paper/30 bg-transparent px-4 text-[15px] font-[550] text-paper focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ember"
                 >
                   <option value="" disabled className="text-ink">
                     Towns…

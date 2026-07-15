@@ -29,8 +29,14 @@ export function haversineKm(a: LatLng, b: LatLng): number {
   return 2 * EARTH_RADIUS_KM * Math.asin(Math.sqrt(h))
 }
 
-/** Human distance label: one decimal below 10 km ("2.1 km"), whole km beyond ("219 km"). */
+/**
+ * Human distance label: "< 1 km" up close, one decimal below 10 km ("2.1 km"),
+ * whole km beyond ("219 km"). The near band matters because town-pick
+ * locations reuse branch coordinates, so a buyer's own town otherwise reads as
+ * a bogus-looking "0 km away".
+ */
 export function formatKm(km: number): string {
+  if (km < 1) return '< 1 km'
   const rounded = km < 10 ? Math.round(km * 10) / 10 : Math.round(km)
   return `${rounded} km`
 }

@@ -34,6 +34,8 @@ type BranchField =
   | 'deliveryFee'
   | 'minimumOrder'
   | 'deliveryRadius'
+  | 'deliveryBaseRadius'
+  | 'deliveryPerKm'
   | 'openingHours'
 type BranchFieldErrors = Partial<Record<BranchField, string>>
 
@@ -74,6 +76,8 @@ function validationErrorsFromApi(error: unknown): BranchFieldErrors {
   add('deliveryFee', ['fulfillment', 'deliveryFeeCents'], 'Enter a valid delivery fee.')
   add('minimumOrder', ['fulfillment', 'minOrderCents'], 'Enter a valid minimum order.')
   add('deliveryRadius', ['fulfillment', 'deliveryRadiusKm'], 'Enter a delivery radius of zero or more.')
+  add('deliveryBaseRadius', ['fulfillment', 'deliveryBaseRadiusKm'], 'Enter a base radius between 0 and 100 km.')
+  add('deliveryPerKm', ['fulfillment', 'deliveryPerKmCents'], 'Enter a per-km rate of zero or more.')
   add('openingHours', ['openingHours'], 'Check the opening hours.')
   return errors
 }
@@ -99,6 +103,13 @@ function BranchEditor({ branch, onClose, onCreated }: { branch: AdminBranch | nu
   const [deliveryFee, setDeliveryFee] = useState(euroInput(branch?.fulfillment.deliveryFeeCents))
   const [minimumOrder, setMinimumOrder] = useState(euroInput(branch?.fulfillment.minOrderCents))
   const [deliveryRadius, setDeliveryRadius] = useState(branch?.fulfillment.deliveryRadiusKm?.toString() ?? '')
+  // Tiered delivery pricing is part of the same fulfillment object on the API, so the form must
+  // carry the branch's current values — a save that drops them would reset dashboard-configured
+  // pricing to the server defaults (5 km base, flat fee).
+  const [deliveryBaseRadius, setDeliveryBaseRadius] = useState(
+    String(branch?.fulfillment.deliveryBaseRadiusKm ?? 5),
+  )
+  const [deliveryPerKm, setDeliveryPerKm] = useState(euroInput(branch?.fulfillment.deliveryPerKmCents ?? 0))
   const [cashEnabled, setCashEnabled] = useState(branch?.payment.cashEnabled ?? false)
   const [imageObjectKey, setImageObjectKey] = useState<string | null | undefined>(undefined)
   const [error, setError] = useState<string | null>(null)
@@ -149,10 +160,18 @@ function BranchEditor({ branch, onClose, onCreated }: { branch: AdminBranch | nu
     const fee = parseCents(deliveryFee)
     const minimum = parseCents(minimumOrder)
     const radius = deliveryRadius.trim() ? Number(deliveryRadius) : null
+    const baseRadius = deliveryBaseRadius.trim() ? Number(deliveryBaseRadius) : null
+    const perKm = parseCents(deliveryPerKm)
     if (deliveryEnabled && fee === 'invalid') clientErrors.deliveryFee = 'Enter a delivery fee of zero or more.'
     if (deliveryEnabled && minimum === 'invalid') clientErrors.minimumOrder = 'Enter a minimum order of zero or more.'
     if (deliveryEnabled && radius !== null && (!Number.isFinite(radius) || radius < 0)) {
       clientErrors.deliveryRadius = 'Enter a delivery radius of zero or more.'
+    }
+    if (deliveryEnabled && (baseRadius === null || !Number.isFinite(baseRadius) || baseRadius < 0 || baseRadius > 100)) {
+      clientErrors.deliveryBaseRadius = 'Enter a base radius between 0 and 100 km.'
+    }
+    if (deliveryEnabled && (perKm === null || perKm === 'invalid')) {
+      clientErrors.deliveryPerKm = 'Enter a per-km rate of zero or more (0 keeps the fee flat).'
     }
     if (hours.some((entry) => entry.opensAt === entry.closesAt)) {
       clientErrors.openingHours = 'Opening and closing times must be different.'
@@ -166,7 +185,20 @@ function BranchEditor({ branch, onClose, onCreated }: { branch: AdminBranch | nu
     const validLongitude = lng === 'invalid' ? null : lng
     const validFee = fee === 'invalid' ? null : fee
     const validMinimum = minimum === 'invalid' ? null : minimum
-    const fulfillment = deliveryEnabled ? { collectionEnabled, deliveryEnabled: true, deliveryFeeCents: validFee, minOrderCents: validMinimum, deliveryRadiusKm: radius, deliveryBaseRadiusKm: null, deliveryPerKmCents: null } : { collectionEnabled, deliveryEnabled: false, deliveryFeeCents: null, minOrderCents: null, deliveryRadiusKm: null, deliveryBaseRadiusKm: null, deliveryPerKmCents: null }
+    // The API rejects null for the tiered fields and resets omitted ones to its defaults, so when
+    // delivery is on they are always sent as the validated numbers; when it is off they are
+    // omitted (the server ignores tiered pricing for non-delivery branches).
+    const fulfillment = deliveryEnabled
+      ? {
+          collectionEnabled,
+          deliveryEnabled: true,
+          deliveryFeeCents: validFee,
+          minOrderCents: validMinimum,
+          deliveryRadiusKm: radius,
+          deliveryBaseRadiusKm: baseRadius as number,
+          deliveryPerKmCents: perKm as number,
+        }
+      : { collectionEnabled, deliveryEnabled: false, deliveryFeeCents: null, minOrderCents: null, deliveryRadiusKm: null }
     const address = { line1: line1.trim(), line2: line2.trim() || null, town: town.trim(), county: county.trim(), eircode: eircode.trim().toUpperCase(), latitude: validLatitude, longitude: validLongitude }
     setSaving(true)
     try {
@@ -318,11 +350,18 @@ function BranchEditor({ branch, onClose, onCreated }: { branch: AdminBranch | nu
                 </label>
               </div>
               {deliveryEnabled && (
-                <div className="mt-4 grid gap-4 sm:grid-cols-3">
-                  <TextField label="Delivery fee (€)" inputMode="decimal" value={deliveryFee} error={fieldErrors.deliveryFee} onChange={(event) => { setDeliveryFee(event.target.value); clearFieldError('deliveryFee') }} />
-                  <TextField label="Minimum order (€)" inputMode="decimal" value={minimumOrder} error={fieldErrors.minimumOrder} onChange={(event) => { setMinimumOrder(event.target.value); clearFieldError('minimumOrder') }} />
-                  <TextField label="Radius (km)" inputMode="decimal" value={deliveryRadius} error={fieldErrors.deliveryRadius} onChange={(event) => { setDeliveryRadius(event.target.value); clearFieldError('deliveryRadius') }} />
-                </div>
+                <>
+                  <div className="mt-4 grid gap-4 sm:grid-cols-3">
+                    <TextField label="Delivery fee (€)" inputMode="decimal" value={deliveryFee} error={fieldErrors.deliveryFee} onChange={(event) => { setDeliveryFee(event.target.value); clearFieldError('deliveryFee') }} />
+                    <TextField label="Minimum order (€)" inputMode="decimal" value={minimumOrder} error={fieldErrors.minimumOrder} onChange={(event) => { setMinimumOrder(event.target.value); clearFieldError('minimumOrder') }} />
+                    <TextField label="Radius (km)" inputMode="decimal" value={deliveryRadius} error={fieldErrors.deliveryRadius} onChange={(event) => { setDeliveryRadius(event.target.value); clearFieldError('deliveryRadius') }} />
+                    <TextField label="Base radius (km)" inputMode="decimal" value={deliveryBaseRadius} error={fieldErrors.deliveryBaseRadius} onChange={(event) => { setDeliveryBaseRadius(event.target.value); clearFieldError('deliveryBaseRadius') }} />
+                    <TextField label="Per extra km (€)" inputMode="decimal" value={deliveryPerKm} error={fieldErrors.deliveryPerKm} onChange={(event) => { setDeliveryPerKm(event.target.value); clearFieldError('deliveryPerKm') }} />
+                  </div>
+                  <p className="mt-3 text-[13px] text-muted">
+                    The flat fee covers the base radius; each km beyond it adds the per-km rate, out to the delivery radius. Set the per-km rate to 0 for one flat fee everywhere.
+                  </p>
+                </>
               )}
             </fieldset>
             <HoursEditor value={hours} error={fieldErrors.openingHours} onChange={(nextHours) => {

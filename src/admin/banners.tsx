@@ -58,6 +58,11 @@ function BannerEditor({
       setError('Give the banner a title.')
       return
     }
+    const link = linkUrl.trim()
+    if (link && !link.startsWith('https://') && !link.startsWith('/')) {
+      setError('Use a full https:// URL or a site path starting with /.')
+      return
+    }
     let start: string | null
     let end: string | null
     try {
@@ -75,7 +80,7 @@ function BannerEditor({
     const shared = {
       title: title.trim(),
       body: body.trim() || null,
-      linkUrl: linkUrl.trim() || null,
+      linkUrl: link || null,
       restaurantId: restaurantId || null,
       branchId: branchId || null,
       sortOrder: Number(sortOrder) || 0,

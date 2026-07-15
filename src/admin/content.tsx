@@ -137,7 +137,8 @@ export function ContentPage() {
         ) : (
           groups.map((group) => {
             const Icon = icons[group]
-            const entries = (content.data ?? []).filter((entry) => CONTENT_META[entry.key].group === group)
+            // Tolerate keys this build does not know (a newer API): skip instead of crashing.
+            const entries = (content.data ?? []).filter((entry) => CONTENT_META[entry.key]?.group === group)
             const description =
               group === 'Store availability'
                 ? 'Home-page badges only appear after their URL is saved.'

@@ -151,6 +151,39 @@ describe('admin content and onboarding screens', () => {
     expect(screen.getByText(/membership assignment is an ops step/i)).toBeVisible()
   }, 30000)
 
+  it('keeps dashboard-configured tiered delivery pricing across an admin branch edit', async () => {
+    await signInAdmin()
+    await openAdminScreen('/admin/branches', 'Branches')
+
+    const branchCard = (await screen.findByRole('heading', { name: 'Ranelagh' }, { timeout: 5000 })).closest('li')
+    if (!branchCard) throw new Error('Ranelagh branch card not found')
+    fireEvent.click(within(branchCard).getByRole('button', { name: 'Edit branch' }))
+    expect(await screen.findByLabelText('Base radius (km)')).toHaveValue('2')
+    expect(screen.getByLabelText('Per extra km (€)')).toHaveValue('0.80')
+
+    setField('Branch name', 'Ranelagh Corner')
+    fireEvent.click(screen.getByRole('button', { name: 'Save branch' }))
+    expect(await screen.findByText('Branch saved.', {}, { timeout: 5000 })).toBeVisible()
+
+    const renamedCard = (await screen.findByRole('heading', { name: 'Ranelagh Corner' }, { timeout: 5000 })).closest('li')
+    if (!renamedCard) throw new Error('Renamed branch card not found')
+    fireEvent.click(within(renamedCard).getByRole('button', { name: 'Edit branch' }))
+    expect(await screen.findByLabelText('Base radius (km)')).toHaveValue('2')
+    expect(screen.getByLabelText('Per extra km (€)')).toHaveValue('0.80')
+  }, 30000)
+
+  it('rejects a banner link that is neither https nor a site path', async () => {
+    await signInAdmin()
+    await openAdminScreen('/admin/banners', 'Banners')
+    fireEvent.click(screen.getByRole('button', { name: 'New banner' }))
+    setField('Title', 'Unsafe link banner')
+    setField('Link (optional)', 'javascript:alert(1)')
+    fireEvent.click(screen.getByRole('button', { name: 'Create banner' }))
+
+    expect(await screen.findByText(/https:\/\/ URL or a site path/i)).toBeVisible()
+    expect(screen.queryByText('Banner created.')).toBeNull()
+  }, 20000)
+
   it('explains an invalid restaurant slug next to the field before submitting', async () => {
     await signInAdmin()
     await openAdminScreen('/admin/restaurants', 'Restaurants')

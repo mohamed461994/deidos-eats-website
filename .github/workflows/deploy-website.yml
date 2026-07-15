@@ -57,12 +57,19 @@ jobs:
         with:
           path: deidos-eats-website
 
+      # deidos-eats-contracts is a PRIVATE repo, so the default GITHUB_TOKEN
+      # (scoped to this repo only) cannot read it. ONE-TIME SETUP: create a
+      # fine-grained PAT (or GitHub App token) with read-only "Contents" on
+      # deidos-eats-contracts and store it as the repo secret CONTRACTS_READ_TOKEN
+      # (Settings → Secrets and variables → Actions → Secrets). Without it this
+      # step fails and the build cannot resolve `@deidos-eats/contracts`.
       - name: Check out contracts
         uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/deidos-eats-contracts
           ref: ${{ inputs.contracts_ref }}
           path: deidos-eats-contracts
+          token: ${{ secrets.CONTRACTS_READ_TOKEN }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
