@@ -1,0 +1,168 @@
+# Manual-only deploy of the built website bundle to S3 + CloudFront.
+#
+# This never runs automatically — it has no push/PR trigger. Run it from the
+# Actions tab ("Deploy Website" → "Run workflow") whenever you want to publish.
+#
+# It authenticates to AWS via GitHub OIDC using DeidosEatsWebsiteDeployRole{Dev,Prod},
+# a least-privilege role provisioned by deidos-eats-aws-cloud's WebsiteStack (it can
+# only write the website bucket and invalidate its CloudFront distribution — no CDK
+# or admin rights). WebsiteStack must be deployed once before this workflow can run.
+#
+# Build config: the deployed bundle is a production `vite build` (so it calls the
+# absolute API origin, not the dev-server proxy). All values below are PUBLIC dev
+# identifiers (same as the committed .env.development) used as the default staging
+# target; override any of them per environment via repository Variables (Settings →
+# Secrets and variables → Actions → Variables). Never put a secret here — VITE_*
+# vars are baked into the public browser bundle.
+name: Deploy Website
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Environment to deploy
+        required: true
+        type: choice
+        options:
+          - dev
+          - prod
+        default: dev
+      contracts_ref:
+        description: deidos-eats-contracts git ref to build against (branch or tag)
+        required: true
+        type: string
+        default: main
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    name: Deploy ${{ inputs.environment }} website
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    env:
+      AWS_REGION: eu-west-1
+      DEV_AWS_ACCOUNT_ID: "384489630788"
+      PROD_AWS_ACCOUNT_ID: "Prod-Account-ID"
+      DEV_DEPLOY_ROLE_NAME: DeidosEatsWebsiteDeployRoleDev
+      PROD_DEPLOY_ROLE_NAME: DeidosEatsWebsiteDeployRoleProd
+    steps:
+      # Check both repos out as siblings under the workspace so the website's
+      # `file:../deidos-eats-contracts` dependency and its Vite alias resolve
+      # exactly as they do on a local dev machine.
+      - name: Check out website
+        uses: actions/checkout@v4
+        with:
+          path: deidos-eats-website
+
+      - name: Check out contracts
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/deidos-eats-contracts
+          ref: ${{ inputs.contracts_ref }}
+          path: deidos-eats-contracts
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: deidos-eats-website/package-lock.json
+
+      - name: Resolve deployment role
+        id: role
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ inputs.environment }}" = "dev" ]; then
+            echo "role-arn=arn:aws:iam::${DEV_AWS_ACCOUNT_ID}:role/${DEV_DEPLOY_ROLE_NAME}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "${PROD_AWS_ACCOUNT_ID}" = "Prod-Account-ID" ]; then
+            echo "Production account ID is still a placeholder. Configure it before deploying prod." >&2
+            exit 1
+          fi
+          echo "role-arn=arn:aws:iam::${PROD_AWS_ACCOUNT_ID}:role/${PROD_DEPLOY_ROLE_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ steps.role.outputs.role-arn }}
+
+      # Production config, injected at build time (never committed). Repository
+      # Variables win; otherwise fall back to the public dev/staging identifiers.
+      - name: Write .env.production
+        shell: bash
+        working-directory: deidos-eats-website
+        run: |
+          set -euo pipefail
+          cat > .env.production <<EOF
+          VITE_API_MODE=live
+          VITE_API_BASE_URL=${{ vars.VITE_API_BASE_URL || 'https://izio5wfs4g.execute-api.eu-west-1.amazonaws.com/dev' }}
+          VITE_WS_URL=${{ vars.VITE_WS_URL || 'wss://s65u292zxd.execute-api.eu-west-1.amazonaws.com/dev' }}
+          VITE_COGNITO_USER_POOL_ID=${{ vars.VITE_COGNITO_USER_POOL_ID || 'eu-west-1_iah1mG6kG' }}
+          VITE_COGNITO_CLIENT_ID=${{ vars.VITE_COGNITO_CLIENT_ID || '4033eub2av4ulr8mi32gu2evhv' }}
+          VITE_STAFF_SIGN_IN_PATH=${{ vars.VITE_STAFF_SIGN_IN_PATH || '/access/hall-47' }}
+          VITE_STRIPE_PUBLISHABLE_KEY=${{ vars.VITE_STRIPE_PUBLISHABLE_KEY || 'pk_test_51TjmgMDJtx90rYI3kZcflO8lH3Ft1R7sG3FQMlao14mb8PESo2hRRUzSa3VuCqxzNIzdKegw9WUEuCbzMsvBh6oF00p1g6MAVh' }}
+          VITE_RESTAURANT_ID=${{ vars.VITE_RESTAURANT_ID || '' }}
+          EOF
+          echo "Wrote .env.production (VITE_API_MODE=live)"
+
+      - name: Install dependencies
+        working-directory: deidos-eats-website
+        run: npm ci
+
+      - name: Build (production)
+        working-directory: deidos-eats-website
+        run: npm run build
+
+      - name: Resolve hosting targets from SSM
+        id: targets
+        shell: bash
+        run: |
+          set -euo pipefail
+          env="${{ inputs.environment }}"
+          bucket=$(aws ssm get-parameter --name "/deidos-eats/${env}/website/bucket-name" --query 'Parameter.Value' --output text)
+          dist=$(aws ssm get-parameter --name "/deidos-eats/${env}/website/distribution-id" --query 'Parameter.Value' --output text)
+          domain=$(aws ssm get-parameter --name "/deidos-eats/${env}/website/distribution-domain" --query 'Parameter.Value' --output text)
+          echo "bucket=$bucket" >> "$GITHUB_OUTPUT"
+          echo "distribution=$dist" >> "$GITHUB_OUTPUT"
+          echo "domain=$domain" >> "$GITHUB_OUTPUT"
+
+      - name: Sync to S3
+        shell: bash
+        working-directory: deidos-eats-website
+        env:
+          BUCKET: ${{ steps.targets.outputs.bucket }}
+        run: |
+          set -euo pipefail
+          # Hashed/static assets: immutable long cache (content-hashed by Vite).
+          # --delete prunes files removed since the last deploy. HTML is excluded
+          # here so it is neither long-cached nor deleted.
+          aws s3 sync dist "s3://${BUCKET}" \
+            --delete \
+            --cache-control 'public,max-age=31536000,immutable' \
+            --exclude '*.html'
+          # Entry HTML: never cache, so a new deploy is picked up immediately.
+          aws s3 sync dist "s3://${BUCKET}" \
+            --exclude '*' --include '*.html' \
+            --cache-control 'no-cache'
+
+      - name: Invalidate CloudFront
+        shell: bash
+        env:
+          DISTRIBUTION: ${{ steps.targets.outputs.distribution }}
+        run: |
+          set -euo pipefail
+          aws cloudfront create-invalidation --distribution-id "${DISTRIBUTION}" --paths '/*'
+
+      - name: Summary
+        shell: bash
+        run: |
+          echo "### Website deployed :rocket:" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Environment: **${{ inputs.environment }}**" >> "$GITHUB_STEP_SUMMARY"
+          echo "- URL: https://${{ steps.targets.outputs.domain }}" >> "$GITHUB_STEP_SUMMARY"
