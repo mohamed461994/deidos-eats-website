@@ -14,6 +14,12 @@ import type {
   AdminBannerUpdate,
   AdminBranch,
   AdminBranchCreate,
+  AdminStaffCreate,
+  AdminStaffCreateResult,
+  AdminStaffList,
+  AdminStaffMember,
+  AdminStaffMemberUpdate,
+  AdminStaffPasswordReset,
   AdminBranchList,
   AdminBranchUpdate,
   AdminRestaurant,
@@ -61,6 +67,16 @@ import {
   resetMockAdminForTests,
   updateMockPromo,
 } from './admin'
+import {
+  createAdminStaffForTests,
+  disableAdminStaffMemberForTests,
+  enableAdminStaffMemberForTests,
+  getAdminStaffMemberForTests,
+  listAdminStaffForTests,
+  resetAdminStaffForTests,
+  resetAdminStaffPasswordForTests,
+  updateAdminStaffMemberForTests,
+} from './admin-staff'
 import {
   createAdminBannerForTests,
   createAdminBranchForTests,
@@ -219,6 +235,7 @@ export function resetMockApiForTests() {
   resetMarketplaceForTests()
   resetMockAdminForTests()
   resetMockAdminContentForTests()
+  resetAdminStaffForTests()
 }
 
 export { bumpMockPromoTokenForTests }
@@ -637,6 +654,52 @@ export async function listAdminRestaurants(cursor?: string): Promise<AdminRestau
     items: listAdminRestaurantsForTests(),
     pageInfo: { nextCursor: null },
   }
+}
+
+export async function listAdminStaff(cursor?: string): Promise<AdminStaffList> {
+  await delay()
+  requireAdmin()
+  void cursor
+  return { items: listAdminStaffForTests(), pageInfo: { nextCursor: null } }
+}
+
+export async function createAdminStaff(input: AdminStaffCreate): Promise<AdminStaffCreateResult> {
+  await delay()
+  requireAdmin()
+  return createAdminStaffForTests(input)
+}
+
+export async function getAdminStaffMember(userId: string): Promise<AdminStaffMember> {
+  await delay()
+  requireAdmin()
+  return getAdminStaffMemberForTests(userId)
+}
+
+export async function updateAdminStaffMember(
+  userId: string,
+  input: AdminStaffMemberUpdate,
+): Promise<AdminStaffMember> {
+  await delay()
+  requireAdmin()
+  return updateAdminStaffMemberForTests(userId, input)
+}
+
+export async function resetAdminStaffPassword(userId: string): Promise<AdminStaffPasswordReset> {
+  await delay()
+  requireAdmin()
+  return resetAdminStaffPasswordForTests(userId)
+}
+
+export async function disableAdminStaffMember(userId: string): Promise<AdminStaffMember> {
+  await delay()
+  requireAdmin()
+  return disableAdminStaffMemberForTests(userId)
+}
+
+export async function enableAdminStaffMember(userId: string): Promise<AdminStaffMember> {
+  await delay()
+  requireAdmin()
+  return enableAdminStaffMemberForTests(userId)
 }
 
 export async function listAdminBanners(cursor?: string): Promise<AdminBannerList> {

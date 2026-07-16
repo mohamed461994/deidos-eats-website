@@ -13,10 +13,28 @@
  */
 import { mockStore } from '@/api/mock/store'
 
-import { AuthFlowError, type AuthProvider, type SignUpResult } from './provider'
+import { AuthFlowError, type AuthProvider, type SignUpResult, type StaffSignInStep } from './provider'
 
 const SESSION_KEY = 'puca-mock-session-v1'
-let pendingStaff: { email: string; mode: 'challenge' | 'enrollment' } | null = null
+let pendingStaff: { email: string; mode: 'challenge' | 'enrollment' | 'newPassword' } | null = null
+
+/** Route a completed staff authentication the same way the real onSuccess does. */
+function staffStepAfterAuth(email: string): StaffSignInStep {
+  const role = mockStore.profileRole(email)
+  if (role === 'restaurant_staff') {
+    // Kitchen staff activate here but belong on the dashboard/Orderpad — no panel session.
+    pendingStaff = null
+    return { kind: 'staffReady' }
+  }
+  if (role !== 'admin' && role !== 'restaurant_manager') {
+    throw new AuthFlowError('This account does not have access to the staff panel.', 'staff_access_denied')
+  }
+  const mode = mockStore.hasStaffMfa(email) ? 'challenge' : 'enrollment'
+  pendingStaff = { email, mode }
+  return mode === 'challenge'
+    ? { kind: 'totpChallenge' }
+    : { kind: 'totpEnrollment', secret: 'JBSWY3DPEHPK3PXP' }
+}
 
 export const mockAuthProvider: AuthProvider = {
   async getAccessToken() {
@@ -57,16 +75,27 @@ export const mockAuthProvider: AuthProvider = {
     pendingStaff = null
     if (mockStore.profileStatus(email) !== 'confirmed' || password.length < 12)
       throw new AuthFlowError('Wrong email or password.', 'invalid_credentials')
-    if (!['admin', 'restaurant_manager'].includes(mockStore.profileRole(email)))
+    // Temp-password first login must set a new password before anything else.
+    if (mockStore.needsNewPassword(email)) {
+      pendingStaff = { email, mode: 'newPassword' }
+      return { kind: 'newPasswordRequired' } as const
+    }
+    return staffStepAfterAuth(email)
+  },
+
+  async completeStaffNewPassword(newPassword) {
+    await new Promise((r) => setTimeout(r, 400))
+    if (!pendingStaff || pendingStaff.mode !== 'newPassword')
+      throw new AuthFlowError('Start staff sign-in again.', 'unknown')
+    if (newPassword.length < 12)
       throw new AuthFlowError(
-        'This account does not have access to the staff panel.',
-        'staff_access_denied',
+        'Password must be at least 12 characters with upper, lower, number and symbol.',
+        'password_policy',
       )
-    const mode = mockStore.hasStaffMfa(email) ? 'challenge' : 'enrollment'
-    pendingStaff = { email, mode }
-    return mode === 'challenge'
-      ? ({ kind: 'totpChallenge' } as const)
-      : ({ kind: 'totpEnrollment', secret: 'JBSWY3DPEHPK3PXP' } as const)
+    const { email } = pendingStaff
+    mockStore.clearNewPasswordRequired(email)
+    pendingStaff = null
+    return staffStepAfterAuth(email)
   },
 
   async confirmStaffMfa(code) {

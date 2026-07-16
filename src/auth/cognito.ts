@@ -14,6 +14,7 @@ import {
   CognitoUserAttribute,
   CognitoUserPool,
   type CognitoUserSession,
+  type IAuthenticationCallback,
 } from 'amazon-cognito-identity-js'
 
 import { config } from '@/config'
@@ -25,7 +26,7 @@ import {
   type StaffSignInStep,
 } from './provider'
 
-type PendingStaffMode = 'challenge' | 'enrollment'
+type PendingStaffMode = 'challenge' | 'enrollment' | 'newPassword'
 
 let pendingStaffUser: CognitoUser | null = null
 let pendingStaffMode: PendingStaffMode | null = null
@@ -85,12 +86,9 @@ function currentSession(): Promise<CognitoUserSession | null> {
   })
 }
 
-function isPrivilegedSession(session: CognitoUserSession): boolean {
-  const payload = session.getAccessToken().decodePayload() as {
-    'cognito:groups'?: unknown
-  }
-  const groups = Array.isArray(payload['cognito:groups']) ? payload['cognito:groups'] : []
-  return groups.includes('admin') || groups.includes('restaurant_manager')
+function sessionGroups(session: CognitoUserSession): string[] {
+  const payload = session.getAccessToken().decodePayload() as { 'cognito:groups'?: unknown }
+  return Array.isArray(payload['cognito:groups']) ? (payload['cognito:groups'] as string[]) : []
 }
 
 function setSoftwareTokenPreferred(user: CognitoUser): Promise<void> {
@@ -115,6 +113,109 @@ function beginSoftwareTokenEnrollment(user: CognitoUser): Promise<StaffSignInSte
       },
     })
   })
+}
+
+/**
+ * The staff auth callbacks, shared by `beginStaffSignIn` (authenticateUser) and
+ * `completeStaffNewPassword` (completeNewPasswordChallenge) so both go through the SAME
+ * post-authentication routing. On a completed authentication:
+ * - admin / manager → enroll TOTP (or, if a verified token exists but isn't preferred, prefer it and
+ *   require one more sign-in so Cognito challenges next time) → the panel;
+ * - kitchen staff (restaurant_staff) → `staffReady` (they belong on the dashboard/Orderpad);
+ * - anything else → denied.
+ * The `newPasswordRequired` branch converts a temp-password account into the set-password step.
+ */
+function staffAuthCallbacks(
+  user: CognitoUser,
+  resolve: (step: StaffSignInStep) => void,
+  reject: (error: unknown) => void,
+): IAuthenticationCallback {
+  return {
+    onSuccess: (session) => {
+      const groups = sessionGroups(session)
+      const privileged = groups.includes('admin') || groups.includes('restaurant_manager')
+      if (!privileged) {
+        // A signed-out terminal: kitchen staff activate here but never hold a panel session.
+        user.signOut()
+        clearPendingStaff()
+        if (groups.includes('restaurant_staff')) {
+          resolve({ kind: 'staffReady' })
+        } else {
+          reject(
+            new AuthFlowError(
+              'This account does not have access to the staff panel.',
+              'staff_access_denied',
+            ),
+          )
+        }
+        return
+      }
+
+      user.getUserData((error, data) => {
+        if (error) {
+          user.signOut()
+          reject(mapCognitoError(error))
+          return
+        }
+
+        if (data?.UserMFASettingList?.includes('SOFTWARE_TOKEN_MFA')) {
+          // In OPTIONAL-MFA pools a verified token that is not preferred can let auth complete
+          // without a challenge. Prefer it, discard this non-MFA session, and require a fresh
+          // sign-in so Cognito must challenge the next attempt.
+          void setSoftwareTokenPreferred(user)
+            .then(() => {
+              user.signOut()
+              reject(
+                new AuthFlowError(
+                  'Authenticator verification is now required. Sign in once more to continue.',
+                  'mfa_retry_required',
+                ),
+              )
+            })
+            .catch((preferenceError) => {
+              user.signOut()
+              reject(preferenceError)
+            })
+          return
+        }
+
+        void beginSoftwareTokenEnrollment(user).then(resolve, reject)
+      })
+    },
+    onFailure: (error) => {
+      clearPendingStaff()
+      reject(mapCognitoError(error))
+    },
+    totpRequired: () => {
+      pendingStaffUser = user
+      pendingStaffMode = 'challenge'
+      resolve({ kind: 'totpChallenge' })
+    },
+    mfaSetup: () => {
+      void beginSoftwareTokenEnrollment(user).then(resolve, reject)
+    },
+    mfaRequired: () => {
+      user.signOut()
+      clearPendingStaff()
+      reject(
+        new AuthFlowError('This staff panel supports authenticator-app MFA only.', 'unsupported_challenge'),
+      )
+    },
+    selectMFAType: () => {
+      user.signOut()
+      clearPendingStaff()
+      reject(
+        new AuthFlowError('This staff panel supports authenticator-app MFA only.', 'unsupported_challenge'),
+      )
+    },
+    newPasswordRequired: () => {
+      // Fires before any session exists (temp-password first login). Hold the challenge and let the
+      // UI collect a new password; completing it re-enters these callbacks via onSuccess/totpRequired.
+      pendingStaffUser = user
+      pendingStaffMode = 'newPassword'
+      resolve({ kind: 'newPasswordRequired' })
+    },
+  }
 }
 
 export const cognitoAuthProvider: AuthProvider = {
@@ -167,93 +268,20 @@ export const cognitoAuthProvider: AuthProvider = {
     const user = new CognitoUser({ Username: email, Pool: pool() })
     const details = new AuthenticationDetails({ Username: email, Password: password })
     return new Promise<StaffSignInStep>((resolve, reject) => {
-      user.authenticateUser(details, {
-        onSuccess: (session) => {
-          if (!isPrivilegedSession(session)) {
-            user.signOut()
-            reject(
-              new AuthFlowError(
-                'This account does not have access to the staff panel.',
-                'staff_access_denied',
-              ),
-            )
-            return
-          }
+      user.authenticateUser(details, staffAuthCallbacks(user, resolve, reject))
+    })
+  },
 
-          user.getUserData((error, data) => {
-            if (error) {
-              user.signOut()
-              reject(mapCognitoError(error))
-              return
-            }
-
-            if (data?.UserMFASettingList?.includes('SOFTWARE_TOKEN_MFA')) {
-              // In OPTIONAL-MFA pools a verified token that is not preferred can let auth
-              // complete without a challenge. Prefer it, discard this non-MFA session, and
-              // require a fresh sign-in so Cognito must challenge the next attempt.
-              void setSoftwareTokenPreferred(user)
-                .then(() => {
-                  user.signOut()
-                  reject(
-                    new AuthFlowError(
-                      'Authenticator verification is now required. Sign in once more to continue.',
-                      'mfa_retry_required',
-                    ),
-                  )
-                })
-                .catch((preferenceError) => {
-                  user.signOut()
-                  reject(preferenceError)
-                })
-              return
-            }
-
-            void beginSoftwareTokenEnrollment(user).then(resolve, reject)
-          })
-        },
-        onFailure: (error) => {
-          clearPendingStaff()
-          reject(mapCognitoError(error))
-        },
-        totpRequired: () => {
-          pendingStaffUser = user
-          pendingStaffMode = 'challenge'
-          resolve({ kind: 'totpChallenge' })
-        },
-        mfaSetup: () => {
-          void beginSoftwareTokenEnrollment(user).then(resolve, reject)
-        },
-        mfaRequired: () => {
-          user.signOut()
-          clearPendingStaff()
-          reject(
-            new AuthFlowError(
-              'This staff panel supports authenticator-app MFA only.',
-              'unsupported_challenge',
-            ),
-          )
-        },
-        selectMFAType: () => {
-          user.signOut()
-          clearPendingStaff()
-          reject(
-            new AuthFlowError(
-              'This staff panel supports authenticator-app MFA only.',
-              'unsupported_challenge',
-            ),
-          )
-        },
-        newPasswordRequired: () => {
-          user.signOut()
-          clearPendingStaff()
-          reject(
-            new AuthFlowError(
-              'This account needs administrator attention before it can sign in.',
-              'unsupported_challenge',
-            ),
-          )
-        },
-      })
+  completeStaffNewPassword(newPassword) {
+    const user = pendingStaffUser
+    if (!user || pendingStaffMode !== 'newPassword') {
+      return Promise.reject(new AuthFlowError('Start staff sign-in again.', 'unknown'))
+    }
+    return new Promise<StaffSignInStep>((resolve, reject) => {
+      // Pass an empty attribute map: amazon-cognito-identity-js rejects the challenge if any
+      // non-writable attribute (email_verified, etc.) is included. Completing re-enters the shared
+      // callbacks (onSuccess → enrollment / staffReady, or totpRequired → challenge).
+      user.completeNewPasswordChallenge(newPassword, {}, staffAuthCallbacks(user, resolve, reject))
     })
   },
 

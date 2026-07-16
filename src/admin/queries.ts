@@ -6,6 +6,9 @@ import type {
   AdminBanner,
   AdminBranch,
   AdminRestaurant,
+  AdminStaffCreate,
+  AdminStaffMember,
+  AdminStaffMemberUpdate,
   MenuCatalogItem,
   MenuItemUpdate,
   OvenFeature,
@@ -28,6 +31,7 @@ export const adminQueryKeys = {
   banners: ['admin', 'banners'] as const,
   ovenFeatures: ['admin', 'oven-features'] as const,
   content: ['admin', 'content'] as const,
+  staff: ['admin', 'staff'] as const,
   catalog: (branchId: string) => ['admin', 'promo-catalog', branchId] as const,
 }
 
@@ -191,5 +195,63 @@ export function useAdminContent() {
   return useQuery<SiteContentEntry[]>({
     queryKey: adminQueryKeys.content,
     queryFn: async () => (await adminApi.listAdminContent()).items,
+  })
+}
+
+async function allAdminStaff(): Promise<AdminStaffMember[]> {
+  const items: AdminStaffMember[] = []
+  let cursor: string | undefined
+  do {
+    const page = await adminApi.listAdminStaff(cursor)
+    items.push(...page.items)
+    cursor = page.pageInfo.nextCursor ?? undefined
+  } while (cursor)
+  return items
+}
+
+export function useAdminStaff() {
+  return useQuery({ queryKey: adminQueryKeys.staff, queryFn: allAdminStaff })
+}
+
+/**
+ * Create/promote returns the one-time temporary password to the CALLER. It is deliberately never
+ * written into the query cache — the component shows it once and drops it; the list is refetched
+ * from the server (which never echoes the password).
+ */
+export function useCreateAdminStaff() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: AdminStaffCreate) => adminApi.createAdminStaff(input),
+    // The one-time temp password is in the response. Don't retain it in the mutation cache after the
+    // observer settles — the caller copies it into transient component state and calls .reset().
+    gcTime: 0,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: adminQueryKeys.staff }),
+  })
+}
+
+export function useUpdateAdminStaffMemberships() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ userId, input }: { userId: string; input: AdminStaffMemberUpdate }) =>
+      adminApi.updateAdminStaffMember(userId, input),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: adminQueryKeys.staff }),
+  })
+}
+
+export function useResetAdminStaffPassword() {
+  return useMutation({
+    mutationFn: (userId: string) => adminApi.resetAdminStaffPassword(userId),
+    // Same as create: the temp password must not linger in the mutation cache (the observer stays
+    // mounted on the page, so the caller also calls .reset() after transferring it to local state).
+    gcTime: 0,
+  })
+}
+
+export function useSetAdminStaffDisabled() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ userId, disabled }: { userId: string; disabled: boolean }) =>
+      disabled ? adminApi.disableAdminStaffMember(userId) : adminApi.enableAdminStaffMember(userId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: adminQueryKeys.staff }),
   })
 }

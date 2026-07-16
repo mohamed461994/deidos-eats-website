@@ -27,6 +27,8 @@ interface ProfileRecord {
   role?: User['role']
   staffMfaEnrolled?: boolean
   staffBranchIds?: string[]
+  /** Mirrors Cognito's FORCE_CHANGE_PASSWORD: the account must set a new password at first sign-in. */
+  mustSetPassword?: boolean
 }
 
 export type ProfileStatus = 'none' | 'unconfirmed' | 'confirmed'
@@ -172,11 +174,21 @@ export const mockStore = {
     record.staffMfaEnrolled = enrolled
     persist()
   },
+  needsNewPassword(email: string): boolean {
+    return state.profiles[normalizeEmail(email)]?.mustSetPassword === true
+  },
+  clearNewPasswordRequired(email: string) {
+    const record = state.profiles[normalizeEmail(email)]
+    if (record?.mustSetPassword) {
+      record.mustSetPassword = false
+      persist()
+    }
+  },
   /** Seed a privileged Cognito/API identity for focused staff-panel tests. */
   seedStaffForTests(
     email: string,
     role: Extract<User['role'], 'restaurant_staff' | 'admin' | 'restaurant_manager'>,
-    options: { mfaEnrolled?: boolean; branchIds?: string[] } = {},
+    options: { mfaEnrolled?: boolean; branchIds?: string[]; mustSetPassword?: boolean } = {},
   ) {
     const key = normalizeEmail(email)
     state.profiles[key] = {
@@ -193,6 +205,7 @@ export const mockStore = {
       role,
       staffMfaEnrolled: options.mfaEnrolled ?? false,
       staffBranchIds: options.branchIds ?? [],
+      mustSetPassword: options.mustSetPassword ?? false,
     }
     persist()
   },

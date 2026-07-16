@@ -1,4 +1,4 @@
-import { KeyRound, ShieldCheck } from 'lucide-react'
+import { CheckCircle2, KeyRound, ShieldCheck } from 'lucide-react'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { toDataURL } from 'qrcode'
@@ -57,6 +57,7 @@ export default function StaffSignInPage() {
     staffMfaStep,
     staffEmail,
     beginStaffSignIn,
+    completeStaffNewPassword,
     confirmStaffMfa,
     cancelStaffSignIn,
   } = useAuth()
@@ -65,6 +66,8 @@ export default function StaffSignInPage() {
   const next = safeAdminNext(params.get('next'))
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [code, setCode] = useState('')
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -119,6 +122,27 @@ export default function StaffSignInPage() {
     }
   }
 
+  async function handleNewPassword(event: FormEvent) {
+    event.preventDefault()
+    if (newPassword !== confirmPassword) {
+      setError('The two passwords don’t match.')
+      return
+    }
+    setPending(true)
+    setError(null)
+    try {
+      await completeStaffNewPassword(newPassword)
+      // The step advances (TOTP enrollment, or the ready screen for kitchen staff); the render
+      // follows staffMfaStep. Clear the entered secrets from component state either way.
+      setNewPassword('')
+      setConfirmPassword('')
+    } catch (passwordError) {
+      setError(safeMessage(passwordError))
+    } finally {
+      setPending(false)
+    }
+  }
+
   async function handleTotp(event: FormEvent) {
     event.preventDefault()
     setPending(true)
@@ -136,10 +160,13 @@ export default function StaffSignInPage() {
   async function restart() {
     await cancelStaffSignIn()
     setCode('')
+    setNewPassword('')
+    setConfirmPassword('')
     setError(null)
   }
 
   const enrollment = staffMfaStep?.kind === 'totpEnrollment' ? staffMfaStep : null
+  const step = staffMfaStep?.kind ?? 'credentials'
 
   return (
     <main className="min-h-dvh bg-surface px-4 py-8 sm:grid sm:place-items-center sm:px-6">
@@ -163,7 +190,7 @@ export default function StaffSignInPage() {
         </section>
 
         <section className="p-6 sm:p-10" aria-labelledby="staff-sign-in-heading">
-          {!staffMfaStep ? (
+          {step === 'credentials' ? (
             <>
               <div className="flex items-center gap-3">
                 <KeyRound className="size-5 text-basil" aria-hidden />
@@ -201,6 +228,74 @@ export default function StaffSignInPage() {
                 </Button>
               </form>
             </>
+          ) : step === 'newPasswordRequired' ? (
+            <>
+              <div className="flex items-center gap-3">
+                <KeyRound className="size-5 text-basil" aria-hidden />
+                <h2 id="staff-sign-in-heading" className="text-2xl font-[700] tracking-[-0.02em]">
+                  Set your password
+                </h2>
+              </div>
+              <p className="mt-2 max-w-[52ch] text-[15px] text-muted">
+                This account was created with a temporary password. Choose your own to activate it.
+              </p>
+              <form onSubmit={handleNewPassword} className="mt-7 flex flex-col gap-4" noValidate>
+                <TextField
+                  label="New password"
+                  type="password"
+                  autoComplete="new-password"
+                  required
+                  value={newPassword}
+                  onChange={(event) => setNewPassword(event.target.value)}
+                />
+                <TextField
+                  label="Confirm new password"
+                  type="password"
+                  autoComplete="new-password"
+                  required
+                  value={confirmPassword}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
+                />
+                <p className="text-[13px] text-muted">
+                  At least 12 characters, with an uppercase letter, a lowercase letter, a number, and a symbol.
+                </p>
+                {error && (
+                  <p role="alert" className="rounded-[10px] bg-error-tint px-4 py-3 text-[15px] font-[550] text-error">
+                    {error}
+                  </p>
+                )}
+                <div className="flex flex-wrap gap-3">
+                  <Button
+                    type="submit"
+                    size="lg"
+                    loading={pending}
+                    disabled={newPassword.length < 12 || confirmPassword.length < 12}
+                  >
+                    Set password and continue
+                  </Button>
+                  <Button type="button" variant="ghost" onClick={() => void restart()} disabled={pending}>
+                    Use another account
+                  </Button>
+                </div>
+              </form>
+            </>
+          ) : step === 'staffReady' ? (
+            <div className="flex flex-col items-start">
+              <div className="grid size-12 place-items-center rounded-full bg-basil-tint text-basil-deep">
+                <CheckCircle2 className="size-6" aria-hidden />
+              </div>
+              <h2 id="staff-sign-in-heading" className="mt-5 text-2xl font-[700] tracking-[-0.02em]">
+                Your account is ready
+              </h2>
+              <p className="mt-2 max-w-[52ch] text-[15px] text-muted">
+                Your password is set. Kitchen accounts work on the restaurant dashboard or the Deidos
+                Orderpad — sign in there with your new password. This panel is for administrators and
+                managers.
+              </p>
+              <Button className="mt-7" variant="ghost" onClick={() => void restart()}>
+                Back to sign in
+              </Button>
+            </div>
           ) : (
             <>
               <h2 id="staff-sign-in-heading" className="text-2xl font-[700] tracking-[-0.02em]">

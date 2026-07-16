@@ -18,4 +18,5 @@ export const paths = {
   signUp: (next?: string) => (next ? `/signup?next=${encodeURIComponent(next)}` : '/signup'),
   admin: () => '/admin',
   adminDiscounts: () => '/admin/discounts',
+  adminStaff: () => '/admin/staff',
 } as const

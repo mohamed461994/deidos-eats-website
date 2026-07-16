@@ -24,6 +24,12 @@ import type {
   SiteContentKey,
   SiteContentList,
   SiteContentUpdate,
+  AdminStaffCreate,
+  AdminStaffCreateResult,
+  AdminStaffList,
+  AdminStaffMember,
+  AdminStaffMemberUpdate,
+  AdminStaffPasswordReset,
   StaffBranchMembershipList,
 } from './types'
 import { apiRequest } from './http'
@@ -183,6 +189,37 @@ export async function requestAdminBranchImage(
     method: 'POST',
     body: input,
   })
+}
+
+export async function listAdminStaff(cursor?: string): Promise<AdminStaffList> {
+  return apiRequest(`/admin/staff?${pageParams(cursor)}`)
+}
+
+export async function createAdminStaff(input: AdminStaffCreate): Promise<AdminStaffCreateResult> {
+  return apiRequest('/admin/staff', { method: 'POST', body: input })
+}
+
+export async function getAdminStaffMember(userId: string): Promise<AdminStaffMember> {
+  return apiRequest(`/admin/staff/${encodeURIComponent(userId)}`)
+}
+
+export async function updateAdminStaffMember(
+  userId: string,
+  input: AdminStaffMemberUpdate,
+): Promise<AdminStaffMember> {
+  return apiRequest(`/admin/staff/${encodeURIComponent(userId)}`, { method: 'PATCH', body: input })
+}
+
+export async function resetAdminStaffPassword(userId: string): Promise<AdminStaffPasswordReset> {
+  return apiRequest(`/admin/staff/${encodeURIComponent(userId)}/password-reset`, { method: 'POST' })
+}
+
+export async function disableAdminStaffMember(userId: string): Promise<AdminStaffMember> {
+  return apiRequest(`/admin/staff/${encodeURIComponent(userId)}/disable`, { method: 'POST' })
+}
+
+export async function enableAdminStaffMember(userId: string): Promise<AdminStaffMember> {
+  return apiRequest(`/admin/staff/${encodeURIComponent(userId)}/enable`, { method: 'POST' })
 }
 
 export async function uploadAdminImage(uploadUrl: string, file: File): Promise<void> {

@@ -4,8 +4,13 @@ export interface SignUpResult {
 }
 
 export type StaffSignInStep =
+  // A brand-new (admin-created) account must set its own password before anything else.
+  | { kind: 'newPasswordRequired' }
   | { kind: 'totpEnrollment'; secret: string }
   | { kind: 'totpChallenge' }
+  // Terminal step for kitchen (restaurant_staff) accounts: they activate here but work on the
+  // dashboard/Orderpad, not this panel — so there is no further step and no session is kept.
+  | { kind: 'staffReady' }
 
 export interface AuthProvider {
   /** Resolve a valid access token, refreshing if the SDK supports it. */
@@ -15,6 +20,8 @@ export interface AuthProvider {
   signIn(email: string, password: string): Promise<void>
   /** Start the isolated privileged sign-in flow. Never used by buyer `/signin`. */
   beginStaffSignIn(email: string, password: string): Promise<StaffSignInStep>
+  /** Set a new password to clear the NEW_PASSWORD_REQUIRED challenge, returning the next step. */
+  completeStaffNewPassword(newPassword: string): Promise<StaffSignInStep>
   /** Complete the pending TOTP enrollment or SOFTWARE_TOKEN_MFA challenge. */
   confirmStaffMfa(code: string): Promise<void>
   /** Abandon any pending privileged challenge and clear its partial session. */

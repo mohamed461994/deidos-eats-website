@@ -7,6 +7,7 @@ import {
   Image,
   LogOut,
   ShieldX,
+  Users,
   type LucideIcon,
 } from 'lucide-react'
 import { Navigate, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
@@ -24,6 +25,7 @@ import { BranchesPage } from './branches'
 import { ContentPage } from './content'
 import { OvenPage } from './oven'
 import { RestaurantsPage } from './restaurants'
+import { StaffPage } from './staff'
 
 interface PanelSection {
   label: string
@@ -39,6 +41,7 @@ const SECTIONS: PanelSection[] = [
   { label: 'Text & links', path: '/admin/content', icon: FileText, manager: false },
   { label: 'Restaurants', path: '/admin/restaurants', icon: Building2, manager: false },
   { label: 'Branches', path: '/admin/branches', icon: Flag, manager: false },
+  { label: 'Staff', path: '/admin/staff', icon: Users, manager: false },
 ]
 
 function LoadingGate() {
@@ -153,6 +156,7 @@ function PanelShell() {
               <Route path="content" element={<ContentPage />} />
               <Route path="restaurants" element={<RestaurantsPage />} />
               <Route path="branches" element={<BranchesPage />} />
+              <Route path="staff" element={<StaffPage />} />
             </>
           )}
           <Route path="*" element={<Navigate to={paths.adminDiscounts()} replace />} />

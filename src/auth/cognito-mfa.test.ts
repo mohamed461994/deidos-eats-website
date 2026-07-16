@@ -1,12 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-type Scenario = 'totp' | 'setup'
+type Scenario = 'totp' | 'setup' | 'newpassword'
 
 interface AuthenticationCallbacks {
   onSuccess: (session: unknown) => void
   onFailure: (error: unknown) => void
   totpRequired?: (name: string, parameters: unknown) => void
   mfaSetup?: (name: string, parameters: unknown) => void
+  newPasswordRequired?: (userAttributes: unknown, requiredAttributes: unknown) => void
+}
+
+function session(groups: string[]) {
+  return {
+    getAccessToken: () => ({ decodePayload: () => ({ 'cognito:groups': groups }) }),
+  }
 }
 
 interface ResultCallbacks {
@@ -21,6 +28,9 @@ const sdk = vi.hoisted(() => ({
   verifiedCodes: [] as string[],
   sentCodes: [] as Array<{ code: string; type: string | undefined }>,
   preferences: [] as Array<{ enabled: boolean; preferred: boolean }>,
+  // The groups the account carries once its new password is set (drives the post-password routing).
+  afterNewPasswordGroups: ['restaurant_manager'] as string[],
+  completedPasswords: [] as Array<{ password: string; attributes: unknown }>,
 }))
 
 vi.mock('@/config', () => ({
@@ -41,7 +51,21 @@ vi.mock('amazon-cognito-identity-js', () => {
     }
     authenticateUser(_details: unknown, callbacks: AuthenticationCallbacks) {
       if (sdk.scenario === 'totp') callbacks.totpRequired?.('SOFTWARE_TOKEN_MFA', {})
+      else if (sdk.scenario === 'newpassword') callbacks.newPasswordRequired?.({}, {})
       else callbacks.mfaSetup?.('MFA_SETUP', {})
+    }
+    completeNewPasswordChallenge(
+      password: string,
+      attributes: unknown,
+      callbacks: AuthenticationCallbacks,
+    ) {
+      sdk.completedPasswords.push({ password, attributes })
+      // After the password is set, Cognito re-runs auth. A privileged account with no software token
+      // reaches onSuccess (→ enrollment); a kitchen account reaches onSuccess with only staff groups.
+      callbacks.onSuccess(session(sdk.afterNewPasswordGroups))
+    }
+    getUserData(callback: (error: unknown, data: { UserMFASettingList: string[] }) => void) {
+      callback(null, { UserMFASettingList: [] })
     }
     associateSoftwareToken(callbacks: {
       associateSecretCode: (secret: string) => void
@@ -83,6 +107,8 @@ beforeEach(async () => {
   sdk.verifiedCodes = []
   sdk.sentCodes = []
   sdk.preferences = []
+  sdk.afterNewPasswordGroups = ['restaurant_manager']
+  sdk.completedPasswords = []
   await cognitoAuthProvider.cancelStaffSignIn()
   sdk.signOuts = 0
 })
@@ -113,5 +139,36 @@ describe('Cognito staff MFA callbacks', () => {
     await cognitoAuthProvider.confirmStaffMfa('654321')
     expect(sdk.verifiedCodes).toEqual(['654321'])
     expect(sdk.preferences).toEqual([{ enabled: true, preferred: true }])
+  })
+
+  it('raises the set-password step for a temp-password account', async () => {
+    sdk.scenario = 'newpassword'
+    await expect(
+      cognitoAuthProvider.beginStaffSignIn('new@example.ie', 'TempPassw0rd!'),
+    ).resolves.toEqual({ kind: 'newPasswordRequired' })
+  })
+
+  it('sets the new password (stripping attributes) and enrolls TOTP for a manager', async () => {
+    sdk.scenario = 'newpassword'
+    sdk.afterNewPasswordGroups = ['restaurant_manager']
+    await cognitoAuthProvider.beginStaffSignIn('mgr@example.ie', 'TempPassw0rd!')
+
+    await expect(
+      cognitoAuthProvider.completeStaffNewPassword('BrandNewPassw0rd!'),
+    ).resolves.toEqual({ kind: 'totpEnrollment', secret: 'LOCAL-SECRET' })
+    // The password is set with an EMPTY attribute map — passing email_verified etc. would be rejected.
+    expect(sdk.completedPasswords).toEqual([{ password: 'BrandNewPassw0rd!', attributes: {} }])
+    expect(sdk.associated).toBe(1)
+  })
+
+  it('sets the new password and marks a kitchen account ready (no panel session)', async () => {
+    sdk.scenario = 'newpassword'
+    sdk.afterNewPasswordGroups = ['restaurant_staff']
+    await cognitoAuthProvider.beginStaffSignIn('kitchen@example.ie', 'TempPassw0rd!')
+
+    await expect(
+      cognitoAuthProvider.completeStaffNewPassword('BrandNewPassw0rd!'),
+    ).resolves.toEqual({ kind: 'staffReady' })
+    expect(sdk.signOuts).toBeGreaterThan(0)
   })
 })

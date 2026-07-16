@@ -48,6 +48,7 @@ interface AuthContextValue {
   getAccessToken: () => Promise<string | undefined>
   signIn: (email: string, password: string) => Promise<void>
   beginStaffSignIn: (email: string, password: string) => Promise<StaffSignInStep>
+  completeStaffNewPassword: (newPassword: string) => Promise<StaffSignInStep>
   confirmStaffMfa: (code: string) => Promise<void>
   cancelStaffSignIn: () => Promise<void>
   signUp: (email: string, password: string, fullName: string) => Promise<SignUpResult>
@@ -191,6 +192,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [clearLocalIdentity],
   )
 
+  const completeStaffNewPassword = useCallback(async (newPassword: string) => {
+    // Advance the same step machine the credentials step drives: the next step is TOTP
+    // enrollment/challenge (admin/manager) or the terminal `staffReady` card (kitchen staff, which
+    // stays signedOut). finishStaffSession runs later, from confirmStaffMfa.
+    const step = await provider.completeStaffNewPassword(newPassword)
+    setStaffMfaStep(step)
+    return step
+  }, [])
+
   const confirmStaffMfa = useCallback(
     async (code: string) => {
       await provider.confirmStaffMfa(code)
@@ -238,6 +248,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       getAccessToken: () => provider.getAccessToken(),
       signIn,
       beginStaffSignIn,
+      completeStaffNewPassword,
       confirmStaffMfa,
       cancelStaffSignIn,
       signUp,
@@ -254,6 +265,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       staffVerified,
       signIn,
       beginStaffSignIn,
+      completeStaffNewPassword,
       confirmStaffMfa,
       cancelStaffSignIn,
       signUp,

@@ -32,4 +32,11 @@ export const adminApi = {
   updateAdminBranch: isMock ? mock.updateAdminBranch : live.updateAdminBranch,
   requestAdminBranchImage: isMock ? mock.requestAdminBranchImage : live.requestAdminBranchImage,
   uploadAdminImage: isMock ? mock.uploadAdminImage : live.uploadAdminImage,
+  listAdminStaff: isMock ? mock.listAdminStaff : live.listAdminStaff,
+  createAdminStaff: isMock ? mock.createAdminStaff : live.createAdminStaff,
+  getAdminStaffMember: isMock ? mock.getAdminStaffMember : live.getAdminStaffMember,
+  updateAdminStaffMember: isMock ? mock.updateAdminStaffMember : live.updateAdminStaffMember,
+  resetAdminStaffPassword: isMock ? mock.resetAdminStaffPassword : live.resetAdminStaffPassword,
+  disableAdminStaffMember: isMock ? mock.disableAdminStaffMember : live.disableAdminStaffMember,
+  enableAdminStaffMember: isMock ? mock.enableAdminStaffMember : live.enableAdminStaffMember,
 }
