@@ -73,7 +73,7 @@ export const BranchCard = memo(function BranchCard({ branch, brand }: BranchCard
             src={brand.logoUrl}
             alt=""
             loading="lazy"
-            className="absolute top-3 left-3 size-11 rounded-[10px] border border-border bg-bg object-cover shadow-raised"
+            className="absolute top-3 left-3 size-14 object-contain drop-shadow-lg"
           />
         )}
       </div>

@@ -49,7 +49,7 @@ export function RestaurantHomePage() {
             <img
               src={restaurant.logoUrl}
               alt={restaurant.name}
-              className="rise-in mb-5 size-16 rounded-[16px] object-cover shadow-floating"
+              className="rise-in mb-5 size-16 object-contain drop-shadow-lg"
             />
           )}
           <div className="rise-in">

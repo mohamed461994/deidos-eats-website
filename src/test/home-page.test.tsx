@@ -79,6 +79,21 @@ describe('home page — branch feed', () => {
     expect(nonnasCard.getAttribute('href')).toBe(`/r/nonnas-table/b/${GALWAY_BRANCH_ID}/menu`)
   })
 
+  it('renders transparent restaurant logos without an opaque card tile', async () => {
+    const logoUrl = 'https://assets.example.test/transparent-logo.png'
+    mockMarketplace.restaurants = [{ ...restaurantA, logoUrl }, restaurantB]
+
+    renderAt('/')
+
+    const feed = await findBranchFeed()
+    const logo = Array.from(feed.querySelectorAll('img')).find(
+      (image) => image.getAttribute('src') === logoUrl,
+    )
+    expect(logo).toBeDefined()
+    expect(logo).toHaveClass('object-contain')
+    expect(logo).not.toHaveClass('bg-bg')
+  })
+
   it('sorts open-first when no location is set, and never shows distances', async () => {
     // Close Cork so open-first ordering is observable.
     const closedCork = {

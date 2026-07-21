@@ -207,8 +207,10 @@ function RestaurantEditor({
             <div className="space-y-4">
               <ImageUploadField
                 label="Restaurant logo"
-                hint="JPEG, PNG, or WebP · up to 5 MiB"
+                hint="PNG transparency is preserved · JPEG, PNG, or WebP · up to 5 MiB"
                 imageUrl={logoObjectKey === null ? null : restaurant.logoUrl ?? null}
+                imageFit="contain"
+                previewClassName="bg-basil-deep"
                 onRequestUpload={(input) => adminApi.requestAdminRestaurantImage(restaurant.id, input)}
                 onAttached={setLogoObjectKey}
                 onRemove={() => setLogoObjectKey(null)}
@@ -405,7 +407,7 @@ export function RestaurantsPage() {
                     <div className="relative flex min-h-44 flex-col justify-between p-5 text-paper">
                       <div className="flex items-start justify-between gap-3">
                         {restaurant.logoUrl ? (
-                          <img src={restaurant.logoUrl} alt="" className="size-12 rounded-[12px] bg-bg object-cover" />
+                          <img src={restaurant.logoUrl} alt="" className="size-12 object-contain drop-shadow-lg" />
                         ) : (
                           <div className="grid size-12 place-items-center rounded-[12px] bg-paper/15">
                             <Building2 className="size-5" aria-hidden />

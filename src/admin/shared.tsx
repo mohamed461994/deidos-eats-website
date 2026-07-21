@@ -45,6 +45,8 @@ interface ImageUploadFieldProps {
   label: string
   hint: string
   imageUrl: string | null
+  imageFit?: 'cover' | 'contain'
+  previewClassName?: string
   onRequestUpload: (input: {
     contentType: 'image/jpeg' | 'image/png' | 'image/webp'
     contentLengthBytes: number
@@ -63,6 +65,8 @@ export function ImageUploadField({
   label,
   hint,
   imageUrl,
+  imageFit = 'cover',
+  previewClassName,
   onRequestUpload,
   onAttached,
   onRemove,
@@ -119,9 +123,18 @@ export function ImageUploadField({
   return (
     <div className="rounded-[16px] border border-dashed border-border bg-surface p-3">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-        <div className="grid aspect-[4/3] w-full shrink-0 place-items-center overflow-hidden rounded-[12px] bg-bg sm:w-36">
+        <div
+          className={cn(
+            'grid aspect-[4/3] w-full shrink-0 place-items-center overflow-hidden rounded-[12px] sm:w-36',
+            previewClassName ?? 'bg-bg',
+          )}
+        >
           {shownImage ? (
-            <img src={shownImage} alt="" className="size-full object-cover" />
+            <img
+              src={shownImage}
+              alt=""
+              className={cn('size-full', imageFit === 'contain' ? 'object-contain p-3' : 'object-cover')}
+            />
           ) : (
             <ImagePlus className="size-7 text-muted" aria-hidden />
           )}
