@@ -251,6 +251,70 @@ const dips = {
   ],
 }
 
+/**
+ * Groups for the "Build Your Own Pizza" demo item — one of every modifier shape
+ * the wizard handles, so mock-mode tests can exercise the full stepper. Each has
+ * FRESH unique group/option ids (a group is never reused within one item, or a
+ * shared id would collide in React keys / per-group selection sets).
+ */
+const byoSize = {
+  id: 'mg300000-0000-4000-8000-000000000003',
+  name: 'Size',
+  minSelect: 1, // required single-choice (1×1) → auto-advances on pick
+  maxSelect: 1,
+  options: [
+    { id: 'mo300000-0000-4000-8000-000000000001', name: '10" Regular', priceDeltaCents: 0, isAvailable: true },
+    { id: 'mo300000-0000-4000-8000-000000000002', name: '14" Large', priceDeltaCents: 400, isAvailable: true },
+    { id: 'mo300000-0000-4000-8000-000000000003', name: '16" Sharing', priceDeltaCents: 700, isAvailable: true },
+  ],
+}
+const byoSauce = {
+  id: 'mg400000-0000-4000-8000-000000000004',
+  name: 'Sauce',
+  minSelect: 1, // required single-choice with one sold-out option
+  maxSelect: 1,
+  options: [
+    { id: 'mo400000-0000-4000-8000-000000000001', name: 'Tomato', priceDeltaCents: 0, isAvailable: true },
+    { id: 'mo400000-0000-4000-8000-000000000002', name: 'BBQ', priceDeltaCents: 0, isAvailable: true },
+    { id: 'mo400000-0000-4000-8000-000000000003', name: 'Garlic white', priceDeltaCents: 50, isAvailable: false },
+  ],
+}
+const byoToppings = {
+  id: 'mg500000-0000-4000-8000-000000000005',
+  name: 'Toppings',
+  minSelect: 1, // ranged (1–2) → gates Next, never auto-advances
+  maxSelect: 2,
+  options: [
+    { id: 'mo500000-0000-4000-8000-000000000001', name: 'Pepperoni', priceDeltaCents: 150, isAvailable: true },
+    { id: 'mo500000-0000-4000-8000-000000000002', name: 'Mushroom', priceDeltaCents: 100, isAvailable: true },
+    { id: 'mo500000-0000-4000-8000-000000000003', name: 'Peppers', priceDeltaCents: 100, isAvailable: true },
+    { id: 'mo500000-0000-4000-8000-000000000004', name: 'Chorizo', priceDeltaCents: 175, isAvailable: true },
+  ],
+}
+const byoExtras = {
+  id: 'mg600000-0000-4000-8000-000000000006',
+  name: 'Extra toppings',
+  minSelect: 0, // optional open-ended (0–15) → shows Skip, never auto-advances
+  maxSelect: 15,
+  options: [
+    { id: 'mo600000-0000-4000-8000-000000000001', name: 'Extra cheese', priceDeltaCents: 150, isAvailable: true },
+    { id: 'mo600000-0000-4000-8000-000000000002', name: 'Rocket', priceDeltaCents: 75, isAvailable: true },
+    { id: 'mo600000-0000-4000-8000-000000000003', name: 'Chilli flakes', priceDeltaCents: 50, isAvailable: true },
+    { id: 'mo600000-0000-4000-8000-000000000004', name: 'Truffle oil', priceDeltaCents: 200, isAvailable: true },
+  ],
+}
+const byoDips = {
+  id: 'mg700000-0000-4000-8000-000000000007',
+  name: 'Dips',
+  minSelect: 2, // exact-count (2×2) → auto-advances once two are chosen
+  maxSelect: 2,
+  options: [
+    { id: 'mo700000-0000-4000-8000-000000000001', name: 'Garlic aioli', priceDeltaCents: 50, isAvailable: true },
+    { id: 'mo700000-0000-4000-8000-000000000002', name: 'Hot honey', priceDeltaCents: 75, isAvailable: true },
+    { id: 'mo700000-0000-4000-8000-000000000003', name: 'Blue cheese', priceDeltaCents: 75, isAvailable: true },
+  ],
+}
+
 function menuFor(branchId: string): Menu {
   return {
     branchId,
@@ -416,6 +480,26 @@ function menuFor(branchId: string): Menu {
             imageUrl: null,
             isAvailable: true,
             allergens: [],
+          },
+        ],
+      },
+      {
+        id: `c6-${branchId}`,
+        name: 'Make your own',
+        sortOrder: 5,
+        items: [
+          {
+            // The wizard exerciser: required 1×1 size, required 1×1 sauce (one
+            // sold out), ranged 1–2 toppings, optional 0–15 extras, exact 2×2 dips.
+            id: `i-byo-${branchId}`,
+            name: 'Build Your Own Pizza',
+            description: 'Pick a size, sauce, toppings, and dips — the works.',
+            priceCents: 1200,
+            vatRateBasisPoints: VAT_FOOD,
+            imageUrl: img('1513104890138-7c749659a591'),
+            isAvailable: true,
+            allergens: ['gluten', 'milk'],
+            modifierGroups: [byoSize, byoSauce, byoToppings, byoExtras, byoDips],
           },
         ],
       },

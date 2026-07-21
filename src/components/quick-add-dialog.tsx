@@ -17,7 +17,7 @@ import { useMenu, useRestaurants } from '@/api/queries'
 import type { MarketplaceItem, Menu, MenuItem, Restaurant } from '@/api/types'
 import type { CartRestaurant } from '@/cart/cart'
 import { FoodImage } from '@/components/food-image'
-import { ItemDetail } from '@/components/item-dialog'
+import { ItemDetail, itemUsesWizard } from '@/components/item-dialog'
 import { PriceWasNow } from '@/components/price-was-now'
 import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/dialog'
@@ -91,6 +91,7 @@ export function QuickAddDialog({ item, onClose }: QuickAddDialogProps) {
       title={item?.name ?? ''}
       hideTitle
       shape="center"
+      wide={state === 'ready' && itemUsesWizard(menuItem!)}
     >
       {item &&
         (state === 'ready' ? (

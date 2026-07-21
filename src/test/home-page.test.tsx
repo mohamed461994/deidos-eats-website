@@ -147,7 +147,7 @@ describe('home page — merchandising sections', () => {
     expect(within(card).getByText(/was €14\.50, now €11\.50/i)).toBeInTheDocument()
   })
 
-  it('opens the item’s add-to-basket dialog in place — never navigating to the menu', async () => {
+  it('steps through the item wizard in place — never navigating to the menu', async () => {
     renderAt('/')
     // Home + branch-menu + restaurants each resolve through the mock's delay(),
     // so this flow needs headroom beyond the 5s default.
@@ -156,10 +156,17 @@ describe('home page — merchandising sections', () => {
     ).closest('section')!
     fireEvent.click(within(discounted).getByText('The House Special'))
 
-    // Same customise view as the branch menu: modifier groups from the full
-    // item resolve in the dialog, and the promo "now" price rides the Add CTA.
+    // Same customise view as the branch menu, now a step-by-step wizard. Step 1
+    // is the first (optional) group; its heading is the only h3 in the dialog.
     const dialog = await screen.findByRole('dialog', {}, { timeout: 5000 })
-    expect(await within(dialog).findByText('Extra toppings', {}, { timeout: 5000 })).toBeInTheDocument()
+    expect(
+      await within(dialog).findByRole('heading', { name: 'Extra toppings', level: 3 }, { timeout: 5000 }),
+    ).toBeInTheDocument()
+
+    // Optional + nothing chosen → the CTA is Skip; skipping lands on the last
+    // group (Dips), where the CTA becomes the promo-priced Add (was €14.50).
+    fireEvent.click(within(dialog).getByRole('button', { name: /^skip$/i }))
+    expect(within(dialog).getByRole('heading', { name: 'Dips', level: 3 })).toBeInTheDocument()
     const add = within(dialog).getByRole('button', { name: /^add ·/i })
     expect(add).toHaveTextContent('€11.50')
 

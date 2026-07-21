@@ -1,17 +1,18 @@
-import { useMemo, useState } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 
-import type { MenuItem, ModifierGroup, ModifierOption } from '@/api/types'
+import type { MenuItem, ModifierOption } from '@/api/types'
 import { effectiveUnitPriceCents, type CartRestaurant } from '@/cart/cart'
 import { useCart } from '@/cart/context'
 import { FoodImage } from '@/components/food-image'
+import { ItemWizard } from '@/components/item-wizard'
 import { PriceWasNow } from '@/components/price-was-now'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/dialog'
 import { QuantityStepper } from '@/components/ui/quantity'
 import { useToast } from '@/components/ui/toast'
+import { wizardSteps } from '@/lib/modifier-selection'
 import { formatCents } from '@/lib/money'
-import { cn } from '@/lib/utils'
 
 const ALLERGEN_LABELS: Record<string, string> = {
   gluten: 'Gluten',
@@ -28,6 +29,17 @@ const ALLERGEN_LABELS: Record<string, string> = {
   sulphites: 'Sulphites',
   lupin: 'Lupin',
   molluscs: 'Molluscs',
+}
+
+/**
+ * Does this item open the multi-step wizard (has renderable modifier steps), or
+ * the plain detail view? Also decides the Modal's `wide` shape. A pure check —
+ * an optional group with no options isn't a step, so an item can carry modifier
+ * groups yet still be a plain-detail item (see `wizardSteps`).
+ */
+// eslint-disable-next-line react-refresh/only-export-components
+export function itemUsesWizard(item: MenuItem): boolean {
+  return wizardSteps(item.modifierGroups ?? []).length > 0
 }
 
 interface ItemDialogProps {
@@ -55,6 +67,7 @@ export function ItemDialog({ item, restaurant, branchId, branchName, onClose }: 
       title={item.name}
       hideTitle
       shape="center"
+      wide={itemUsesWizard(item)}
     >
       <ItemDetail
         key={item.id}
@@ -79,61 +92,26 @@ interface ItemDetailProps {
 }
 
 /**
- * The scrollable body + add/conflict footer for one menu item. Rendered inside
- * a {@link Modal} by the caller; per-item state resets via a `key` on this
- * component (each item remounts fresh), so no manual reset is needed.
+ * The add-to-cart seam for one menu item. Owns quantity, the branch-conflict
+ * state, and the actual `addItem` call; delegates the choosing UI to either the
+ * {@link ItemWizard} (items with modifier steps) or {@link PlainItemDetail}
+ * (zero-step items). Per-item state resets via a `key` on this component (each
+ * item remounts fresh), so no manual reset is needed.
  */
 export function ItemDetail({ item, restaurant, branchId, branchName, onClose }: ItemDetailProps) {
   const { addItem, openCart, cart, itemCount: cartCount } = useCart()
   const { toast } = useToast()
-  const [selected, setSelected] = useState<Set<string>>(new Set())
   const [quantity, setQuantity] = useState(1)
   const [conflict, setConflict] = useState(false)
-  const [groupErrors, setGroupErrors] = useState<Set<string>>(new Set())
+  // The options carried into the (deferred) conflict confirm — the wizard's
+  // selection lives below this component, so we capture it at attempt time.
+  const pendingOptions = useRef<ModifierOption[]>([])
 
-  const options = useMemo(
-    () => (item.modifierGroups ?? []).flatMap((g) => g.options),
-    [item],
-  )
+  const steps = wizardSteps(item.modifierGroups ?? [])
 
-  const selectedOptions = options.filter((o) => selected.has(o.id))
-  const unitPrice = effectiveUnitPriceCents(item, selectedOptions)
-
-  function countIn(group: ModifierGroup): number {
-    return group.options.filter((o) => selected.has(o.id)).length
-  }
-
-  function toggle(group: ModifierGroup, option: ModifierOption) {
-    const next = new Set(selected)
-    if (next.has(option.id)) {
-      next.delete(option.id)
-    } else {
-      if (countIn(group) >= group.maxSelect) return
-      next.add(option.id)
-    }
-    setSelected(next)
-    if (groupErrors.has(group.id) && group.options.filter((o) => next.has(o.id)).length >= group.minSelect) {
-      const errors = new Set(groupErrors)
-      errors.delete(group.id)
-      setGroupErrors(errors)
-    }
-  }
-
-  function handleAdd(force = false) {
-    const missing = (item.modifierGroups ?? []).filter((g) => countIn(g) < g.minSelect)
-    if (missing.length > 0) {
-      setGroupErrors(new Set(missing.map((g) => g.id)))
-      return
-    }
-    const result = addItem({
-      restaurant,
-      branchId,
-      branchName,
-      item,
-      options: selectedOptions,
-      quantity,
-      force,
-    })
+  function handleAdd(options: ModifierOption[], force = false) {
+    pendingOptions.current = options
+    const result = addItem({ restaurant, branchId, branchName, item, options, quantity, force })
     if (result.outcome === 'conflict') {
       setConflict(true)
       return
@@ -143,6 +121,77 @@ export function ItemDetail({ item, restaurant, branchId, branchName, onClose }: 
     openCart()
   }
 
+  // The branch-conflict confirm block, swapped into the footer while a conflict
+  // is pending. Identical Keep/Clear treatment (incl. `autoFocus` on Keep) as
+  // before; only the source of the options changed (now captured in the ref).
+  const conflictBlock: ReactNode = conflict ? (
+    <div className="flex flex-col gap-3">
+      <p className="text-[15px]">
+        Your basket has {cartCount} item{cartCount === 1 ? '' : 's'} from{' '}
+        <strong>
+          {cart.restaurantName}
+          {cart.branchName ? `, ${cart.branchName}` : ''}
+        </strong>
+        .{' '}
+        {cart.restaurantId === restaurant.id
+          ? `Switching to ${branchName} clears it — a basket is one branch only.`
+          : `Starting a basket with ${restaurant.name} clears it — a basket is one restaurant only.`}
+      </p>
+      <div className="flex gap-2">
+        <Button autoFocus variant="outline" className="flex-1" onClick={() => setConflict(false)}>
+          Keep {cart.restaurantName ?? 'my'} basket
+        </Button>
+        <Button className="flex-1" onClick={() => handleAdd(pendingOptions.current, true)}>
+          Clear &amp; start with {cart.restaurantId === restaurant.id ? branchName : restaurant.name}
+        </Button>
+      </div>
+    </div>
+  ) : null
+
+  if (steps.length === 0) {
+    return (
+      <PlainItemDetail
+        item={item}
+        quantity={quantity}
+        onQuantityChange={setQuantity}
+        conflictBlock={conflictBlock}
+        onAdd={() => handleAdd([])}
+      />
+    )
+  }
+
+  return (
+    <ItemWizard
+      item={item}
+      steps={steps}
+      quantity={quantity}
+      onQuantityChange={setQuantity}
+      onAdd={(options) => handleAdd(options)}
+      footerOverride={conflictBlock ?? undefined}
+    />
+  )
+}
+
+/**
+ * The zero-modifier detail view (drinks, desserts, sides without options): the
+ * appetite-forward header and a single Add, in the default-size Modal — today's
+ * layout minus the modifier groups. Shares the exact footer chrome + conflict
+ * swap with the wizard.
+ */
+function PlainItemDetail({
+  item,
+  quantity,
+  onQuantityChange,
+  conflictBlock,
+  onAdd,
+}: {
+  item: MenuItem
+  quantity: number
+  onQuantityChange: (q: number) => void
+  conflictBlock: ReactNode
+  onAdd: () => void
+}) {
+  const unitPrice = effectiveUnitPriceCents(item, [])
   return (
     <>
       <div className="overflow-y-auto">
@@ -178,95 +227,14 @@ export function ItemDetail({ item, restaurant, branchId, branchName, onClose }: 
               ))}
             </div>
           )}
-
-          {(item.modifierGroups ?? []).map((group) => {
-            const count = countIn(group)
-            const atMax = count >= group.maxSelect
-            return (
-              <fieldset key={group.id} className="rounded-[16px] border border-border p-4">
-                <legend className="px-1 text-sm font-[650]">
-                  {group.name}
-                  <span className="ml-2 font-[450] text-muted">
-                    {group.minSelect > 0 ? `Choose ${group.minSelect}–${group.maxSelect}` : `Up to ${group.maxSelect}`}
-                  </span>
-                </legend>
-                {groupErrors.has(group.id) && (
-                  <p role="alert" className="mb-2 text-[13px] font-[550] text-error">
-                    Choose at least {group.minSelect} to continue.
-                  </p>
-                )}
-                <div className="flex flex-col gap-1">
-                  {group.options.map((option) => {
-                    const checked = selected.has(option.id)
-                    const disabled = !option.isAvailable || (!checked && atMax)
-                    return (
-                      <label
-                        key={option.id}
-                        className={cn(
-                          'flex cursor-pointer items-center gap-3 rounded-[10px] px-2 py-2 transition-colors hover:bg-surface',
-                          disabled && 'cursor-not-allowed opacity-45 hover:bg-transparent',
-                        )}
-                      >
-                        <input
-                          type="checkbox"
-                          className="size-4.5 accent-(--color-basil)"
-                          checked={checked}
-                          disabled={disabled}
-                          onChange={() => toggle(group, option)}
-                        />
-                        <span className="flex-1 text-[15px]">
-                          {option.name}
-                          {!option.isAvailable && (
-                            <span className="ml-2 text-[13px] text-muted">Sold out</span>
-                          )}
-                        </span>
-                        {option.priceDeltaCents > 0 && (
-                          <span className="tabular-nums text-[15px] text-muted">
-                            +{formatCents(option.priceDeltaCents)}
-                          </span>
-                        )}
-                      </label>
-                    )
-                  })}
-                </div>
-              </fieldset>
-            )
-          })}
         </div>
       </div>
 
       <div className="border-t border-border bg-bg px-6 py-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
-        {conflict ? (
-          <div className="flex flex-col gap-3">
-            <p className="text-[15px]">
-              Your basket has {cartCount} item{cartCount === 1 ? '' : 's'} from{' '}
-              <strong>
-                {cart.restaurantName}
-                {cart.branchName ? `, ${cart.branchName}` : ''}
-              </strong>
-              .{' '}
-              {cart.restaurantId === restaurant.id
-                ? `Switching to ${branchName} clears it — a basket is one branch only.`
-                : `Starting a basket with ${restaurant.name} clears it — a basket is one restaurant only.`}
-            </p>
-            <div className="flex gap-2">
-              <Button
-                autoFocus
-                variant="outline"
-                className="flex-1"
-                onClick={() => setConflict(false)}
-              >
-                Keep {cart.restaurantName ?? 'my'} basket
-              </Button>
-              <Button className="flex-1" onClick={() => handleAdd(true)}>
-                Clear &amp; start with {cart.restaurantId === restaurant.id ? branchName : restaurant.name}
-              </Button>
-            </div>
-          </div>
-        ) : (
+        {conflictBlock ?? (
           <div className="flex items-center gap-4">
-            <QuantityStepper value={quantity} onChange={setQuantity} label={item.name} />
-            <Button size="lg" className="flex-1" onClick={() => handleAdd()}>
+            <QuantityStepper value={quantity} onChange={onQuantityChange} label={item.name} />
+            <Button size="lg" className="flex-1" onClick={onAdd}>
               Add · {formatCents(unitPrice * quantity)}
             </Button>
           </div>
