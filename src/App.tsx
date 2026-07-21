@@ -25,6 +25,7 @@ import { OrdersPage } from '@/pages/orders'
 import { OrderTrackingPage } from '@/pages/order-tracking'
 import { RestaurantHomePage } from '@/pages/restaurant'
 import { RestaurantLayout } from '@/pages/restaurant-layout'
+import { ColorLab } from '@/theme/color-lab' // TEMP: brand-green picker — delete this line + the file later
 
 const AdminApp = lazy(() => import('@/admin/app'))
 const StaffSignInPage = lazy(() => import('@/admin/staff-sign-in'))
@@ -129,6 +130,7 @@ export default function App() {
         <AuthProvider>
           <ToastProvider>
             <AppRoutes />
+            <ColorLab /> {/* TEMP: brand-green picker — delete later */}
           </ToastProvider>
         </AuthProvider>
       </BrowserRouter>
