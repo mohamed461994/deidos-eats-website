@@ -79,10 +79,16 @@ export function HomePage() {
   if (pinned) return <Navigate to={paths.restaurant(pinned.slug)} replace />
 
   const content = home?.content
-  const heroHeading = content?.heroHeading ?? 'Hungry? You’re in the right place.'
+  // Admin copy renders verbatim; only the crafted default gets the crust-gold
+  // accent word (a JSX default — a string override can't carry the span).
+  const heroHeading = content?.heroHeading ?? (
+    <>
+      Menus worth getting <span className="text-crust">hungry</span> for.
+    </>
+  )
   const heroSubheading =
     content?.heroSubheading ??
-    'Order from local kitchens for collection or delivery, and track it live from the pass to your door.'
+    'Pick a kitchen near you, order for collection or delivery, and track it live from the pass to your door.'
   const ovenTitle = content?.ovenSectionTitle ?? 'From the oven'
   const discountedTitle = content?.discountedSectionTitle ?? 'On offer'
   const branchesTitle =
@@ -92,14 +98,14 @@ export function HomePage() {
     <main>
       {/* The drench moment: paper-on-deep-basil, bookending the basil footer. */}
       <section aria-labelledby="home-hero-heading" className="bg-basil-deep">
-        <div className="mx-auto max-w-6xl px-4 pt-[clamp(3rem,7vw,5rem)] pb-[clamp(2.5rem,6vw,4rem)] sm:px-6">
+        <div className="mx-auto max-w-6xl px-4 pt-[clamp(2rem,4.5vw,3rem)] pb-[clamp(2.5rem,6vw,4rem)] sm:px-6">
           <h1
             id="home-hero-heading"
-            className="display rise-in max-w-[18ch] text-[clamp(2.5rem,6vw,4.25rem)] text-paper"
+            className="display rise-in max-w-[20ch] text-[clamp(2.75rem,8vw,5.5rem)] text-paper"
           >
             {heroHeading}
           </h1>
-          <p className="rise-in-late mt-4 max-w-[52ch] text-lg text-paper-muted">
+          <p className="rise-in-late mt-5 max-w-[52ch] text-lg text-paper-muted sm:text-xl">
             {heroSubheading}
           </p>
           <div className="rise-in-late mt-7">
