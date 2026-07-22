@@ -47,6 +47,44 @@ export const queryKeys = {
 }
 
 /**
+ * How long public browse data may live — used as BOTH the in-memory `gcTime` of
+ * the persisted queries below AND the on-disk max age in query-persistence.ts,
+ * so the two agree. They must match: the persistence writer snapshots the LIVE
+ * cache, so a query evicted from memory before this window is up would be
+ * dropped from the next snapshot and the on-disk copy would be lost early. "Not
+ * changing daily" (the caching goal) makes a day the natural window.
+ */
+export const PUBLIC_QUERY_CACHE_MS = 24 * 60 * 60 * 1000
+
+/**
+ * How long a menu/restaurant read is treated as fresh before a background
+ * revalidation. Within it, reloads and revisits skip the network entirely;
+ * past it, the cached data still paints instantly and refetches in the
+ * background. This is the freshness↔request-volume dial — raising it cuts
+ * requests but lengthens how long a just-started promo or price change stays
+ * invisible on the buyer menu (never a mischarge: checkout reprices from the
+ * DB). 5 min matches the existing restaurant reads.
+ */
+export const BROWSE_STALE_MS = 5 * 60 * 1000
+
+/**
+ * Query-key prefixes whose payloads are PUBLIC browse data — no auth, no
+ * user-specific content — and so may be persisted to localStorage (consumed by
+ * query-persistence.ts). Declared here, next to `queryKeys`, so a new query's
+ * public/private status is decided where the key is defined. Derived from the
+ * builders (not free string literals) so a prefix rename can't silently
+ * de-sync the whitelist. Deliberately EXCLUDES `marketplaceHome`: its key
+ * embeds the buyer's coordinates, which must not be written to disk.
+ */
+export const PUBLIC_QUERY_PREFIXES: ReadonlySet<string> = new Set([
+  queryKeys.restaurants[0],
+  queryKeys.restaurant('')[0],
+  queryKeys.restaurantBySlug('')[0],
+  queryKeys.branch('')[0],
+  queryKeys.menu('')[0],
+])
+
+/**
  * Promo-bearing queries own their own freshness: the moment the earliest
  * visible `promoEndsAt` passes (or a slept tab wakes past it), the query is
  * invalidated so a "was/now" price never outlives its promo. Wired here in
@@ -96,7 +134,8 @@ export function useRestaurants(): UseQueryResult<RestaurantList> {
   return useQuery({
     queryKey: queryKeys.restaurants,
     queryFn: () => api.listRestaurants(),
-    staleTime: 5 * 60_000,
+    staleTime: BROWSE_STALE_MS,
+    gcTime: PUBLIC_QUERY_CACHE_MS,
   })
 }
 
@@ -117,7 +156,8 @@ export function useRestaurantBySlug(slug: string | undefined): UseQueryResult<Re
     },
     enabled: !!slug,
     retry: retryExceptNotFound,
-    staleTime: 5 * 60_000,
+    staleTime: BROWSE_STALE_MS,
+    gcTime: PUBLIC_QUERY_CACHE_MS,
   })
 }
 
@@ -132,7 +172,8 @@ export function useRestaurant(restaurantId: string | null | undefined): UseQuery
     queryFn: () => api.getRestaurant(restaurantId!),
     enabled: !!restaurantId,
     retry: retryExceptNotFound,
-    staleTime: 5 * 60_000,
+    staleTime: BROWSE_STALE_MS,
+    gcTime: PUBLIC_QUERY_CACHE_MS,
   })
 }
 
@@ -142,6 +183,7 @@ export function useBranch(branchId: string | null) {
     queryFn: () => api.getBranch(branchId!),
     enabled: branchId !== null,
     staleTime: 60_000,
+    gcTime: PUBLIC_QUERY_CACHE_MS,
   })
 }
 
@@ -157,6 +199,7 @@ export function useBranchesDetails(branchIds: string[]): UseQueryResult<Branch>[
       queryKey: queryKeys.branch(id),
       queryFn: () => api.getBranch(id),
       staleTime: 60_000,
+      gcTime: PUBLIC_QUERY_CACHE_MS,
     })),
   })
 }
@@ -166,7 +209,14 @@ export function useMenu(branchId: string | null) {
     queryKey: queryKeys.menu(branchId ?? 'none'),
     queryFn: () => api.getBranchMenu(branchId!),
     enabled: branchId !== null,
-    staleTime: 60_000,
+    // Fresh for BROWSE_STALE_MS, then stale-while-revalidate; retained in memory
+    // (and the persistence snapshot) for PUBLIC_QUERY_CACHE_MS so reloads and
+    // revisits skip the network. Safe: promo endings still invalidate at their
+    // exact instant (below), availability is re-checked at cart validate/
+    // checkout, and the server reprices every order from the DB — a cached price
+    // is display-only and can never change what a buyer is charged.
+    staleTime: BROWSE_STALE_MS,
+    gcTime: PUBLIC_QUERY_CACHE_MS,
   })
   const promoBoundaries = useMemo(
     () => (query.data?.categories ?? []).flatMap((c) => c.items.map((i) => i.promoEndsAt)),

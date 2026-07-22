@@ -57,6 +57,13 @@ fix for the old "site showed browser-local fake user data instead of the real `G
 - `index.ts` (`api`) and `admin-api.ts` (`adminApi`) — dispatchers that pick `isMock ? mock : live`
   per function. `live.ts`/`admin-live.ts` call `apiRequest`; `mock/` implements the same shapes over
   an in-browser store.
+- `query-persistence.ts` — localStorage snapshot/restore of **public browse queries only**
+  (whitelist `PUBLIC_QUERY_PREFIXES` in `queries.ts`: restaurants/restaurant/branch/menu — never
+  `me`, orders, addresses, `['admin', …]`, or `marketplace-home`, whose key embeds the buyer's
+  coordinates) so reloads paint menus from cache instantly. Wired in `main.tsx`, live mode only.
+  Restored queries + the live hooks share `gcTime = PUBLIC_QUERY_CACHE_MS` so a persisted query is
+  never evicted before its on-disk snapshot expires. Persisted prices are display estimates — the
+  server reprices every cart at validate/checkout, so a hand-edited snapshot can't change the charge.
 - `mock/` — `store.ts` (per-account localStorage profiles/addresses/orders + a "kitchen" that advances
   order status on timers), `data.ts` (seed restaurants/branches), `admin*.ts` (admin-data fakes),
   `api.ts` (the mock API surface; `resetMockApiForTests()` + `seedStaffForTests()` drive tests).

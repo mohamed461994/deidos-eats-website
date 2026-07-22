@@ -203,7 +203,7 @@ export function HomePage() {
 function HomeSkeleton() {
   return (
     <>
-      <Skeleton className="aspect-[5/2] w-full rounded-[24px] sm:aspect-[3/1]" />
+      <Skeleton className="aspect-[16/9] w-full rounded-[24px] sm:aspect-[3/1]" />
       <div>
         <Skeleton className="h-8 w-48" />
         <div className="-mx-4 mt-5 flex gap-5 overflow-hidden px-4 sm:-mx-6 sm:px-6">

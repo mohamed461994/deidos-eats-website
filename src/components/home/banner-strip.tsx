@@ -42,6 +42,10 @@ function BannerShell({
 }
 
 function BannerCard({ banner, solo }: { banner: MarketplaceBanner; solo: boolean }) {
+  // Poster voice scales with the card: the solo full-width banner speaks at
+  // near-section volume; cards sharing a snap row each drop a step.
+  const titleClass = solo ? 'text-[clamp(1.625rem,3.5vw,2.5rem)]' : 'text-2xl sm:text-[1.75rem]'
+  const bodyClass = 'mt-2 max-w-[52ch] text-pretty text-base sm:text-[17px]'
   return (
     <BannerShell
       banner={banner}
@@ -62,23 +66,31 @@ function BannerCard({ banner, solo }: { banner: MarketplaceBanner; solo: boolean
           {/* Scrim so paper text holds ≥4.5:1 on any photo. */}
           <div
             aria-hidden
-            className="absolute inset-0 bg-gradient-to-t from-black/72 via-black/25 to-transparent"
+            className="absolute inset-0 bg-gradient-to-t from-black/78 via-black/30 to-transparent"
           />
           {/* The caption is the in-flow box: the aspect ratio sets the card's
               shape, but long admin copy grows the card instead of clipping off
               the top (it did, on ≤320px screens, when the image owned the
               ratio and the text was absolutely positioned). */}
-          <div className="relative flex aspect-[5/2] flex-col justify-end p-5 sm:aspect-[3/1] sm:p-7">
-            <h3 className="display text-xl text-white sm:text-2xl">{banner.title}</h3>
-            {banner.body && (
-              <p className="mt-1 max-w-[60ch] text-[15px] text-white/85">{banner.body}</p>
+          <div
+            className={cn(
+              'relative flex aspect-[16/9] flex-col justify-end sm:aspect-[3/1]',
+              solo ? 'p-6 sm:p-8' : 'p-5 sm:p-7',
             )}
+          >
+            <h3 className={cn('display text-white', titleClass)}>{banner.title}</h3>
+            {banner.body && <p className={cn(bodyClass, 'text-white/90')}>{banner.body}</p>}
           </div>
         </>
       ) : (
-        <div className="flex min-h-32 flex-col justify-center bg-basil-tint p-5 sm:p-7">
-          <h3 className="display text-xl text-basil-deep sm:text-2xl">{banner.title}</h3>
-          {banner.body && <p className="mt-1 max-w-[60ch] text-[15px] text-ink">{banner.body}</p>}
+        <div
+          className={cn(
+            'flex min-h-36 flex-col justify-center bg-basil-tint',
+            solo ? 'p-6 sm:p-8' : 'p-5 sm:p-7',
+          )}
+        >
+          <h3 className={cn('display text-basil-deep', titleClass)}>{banner.title}</h3>
+          {banner.body && <p className={cn(bodyClass, 'text-ink')}>{banner.body}</p>}
         </div>
       )}
     </BannerShell>
