@@ -45,7 +45,7 @@ jobs:
     env:
       AWS_REGION: eu-west-1
       DEV_AWS_ACCOUNT_ID: "384489630788"
-      PROD_AWS_ACCOUNT_ID: "Prod-Account-ID"
+      PROD_AWS_ACCOUNT_ID: "818561370745"
       DEV_DEPLOY_ROLE_NAME: DeidosEatsWebsiteDeployRoleDev
       PROD_DEPLOY_ROLE_NAME: DeidosEatsWebsiteDeployRoleProd
     steps:
