@@ -151,6 +151,19 @@ function staffAuthCallbacks(
         return
       }
 
+      // Dev-only escape hatch: skip TOTP enforcement entirely so staff/admin sign in with
+      // password alone. The Cognito session is already established (onSuccess), so the
+      // panel session can be finalized directly. `config.devDisableStaffTotp` fails closed —
+      // production bundles ignore the flag (see config.ts) and keep enforcement.
+      // Note this does not bypass a server-issued challenge: once an account has a PREFERRED
+      // software token, Cognito fires totpRequired instead of onSuccess and this never runs.
+      // Clearing that requires admin-set-user-mfa-preference on the pool.
+      if (config.devDisableStaffTotp) {
+        clearPendingStaff()
+        resolve({ kind: 'staffSignedIn' })
+        return
+      }
+
       user.getUserData((error, data) => {
         if (error) {
           user.signOut()

@@ -8,6 +8,10 @@ export type StaffSignInStep =
   | { kind: 'newPasswordRequired' }
   | { kind: 'totpEnrollment'; secret: string }
   | { kind: 'totpChallenge' }
+  // Dev-only (VITE_DEV_DISABLE_STAFF_TOTP): a privileged account authenticated without a
+  // TOTP challenge and enrollment is deliberately skipped — the session is complete as-is.
+  // Never reachable in production builds, where the flag must stay unset.
+  | { kind: 'staffSignedIn' }
   // Terminal step for kitchen (restaurant_staff) accounts: they activate here but work on the
   // dashboard/Orderpad, not this panel — so there is no further step and no session is kept.
   | { kind: 'staffReady' }

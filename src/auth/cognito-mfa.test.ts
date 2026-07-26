@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-type Scenario = 'totp' | 'setup' | 'newpassword'
+type Scenario = 'totp' | 'setup' | 'newpassword' | 'success'
 
 interface AuthenticationCallbacks {
   onSuccess: (session: unknown) => void
@@ -31,10 +31,20 @@ const sdk = vi.hoisted(() => ({
   // The groups the account carries once its new password is set (drives the post-password routing).
   afterNewPasswordGroups: ['restaurant_manager'] as string[],
   completedPasswords: [] as Array<{ password: string; attributes: unknown }>,
+  // The groups on the session when authentication completes with no challenge ('success').
+  successGroups: ['restaurant_manager'] as string[],
+  // Stands in for config.devDisableStaffTotp (the dev-only password-only escape hatch).
+  devDisableStaffTotp: false,
 }))
 
 vi.mock('@/config', () => ({
-  config: { cognito: { userPoolId: 'eu-west-1_test', clientId: 'client-test' } },
+  config: {
+    cognito: { userPoolId: 'eu-west-1_test', clientId: 'client-test' },
+    // A getter so individual tests can flip the flag after the module is mocked.
+    get devDisableStaffTotp() {
+      return sdk.devDisableStaffTotp
+    },
+  },
 }))
 
 vi.mock('amazon-cognito-identity-js', () => {
@@ -52,6 +62,7 @@ vi.mock('amazon-cognito-identity-js', () => {
     authenticateUser(_details: unknown, callbacks: AuthenticationCallbacks) {
       if (sdk.scenario === 'totp') callbacks.totpRequired?.('SOFTWARE_TOKEN_MFA', {})
       else if (sdk.scenario === 'newpassword') callbacks.newPasswordRequired?.({}, {})
+      else if (sdk.scenario === 'success') callbacks.onSuccess(session(sdk.successGroups))
       else callbacks.mfaSetup?.('MFA_SETUP', {})
     }
     completeNewPasswordChallenge(
@@ -109,6 +120,8 @@ beforeEach(async () => {
   sdk.preferences = []
   sdk.afterNewPasswordGroups = ['restaurant_manager']
   sdk.completedPasswords = []
+  sdk.successGroups = ['restaurant_manager']
+  sdk.devDisableStaffTotp = false
   await cognitoAuthProvider.cancelStaffSignIn()
   sdk.signOuts = 0
 })
@@ -118,6 +131,45 @@ describe('Cognito staff MFA callbacks', () => {
     await expect(
       cognitoAuthProvider.signIn('admin@example.ie', 'password'),
     ).rejects.toMatchObject({ code: 'staff_sign_in_required' })
+    expect(sdk.signOuts).toBe(1)
+  })
+
+  it('enrolls TOTP for a privileged account when the dev bypass is off', async () => {
+    sdk.scenario = 'success'
+    await expect(
+      cognitoAuthProvider.beginStaffSignIn('admin@example.ie', 'password'),
+    ).resolves.toEqual({ kind: 'totpEnrollment', secret: 'LOCAL-SECRET' })
+    expect(sdk.associated).toBe(1)
+  })
+
+  it('signs a privileged account straight in when the dev bypass is on', async () => {
+    sdk.scenario = 'success'
+    sdk.devDisableStaffTotp = true
+    await expect(
+      cognitoAuthProvider.beginStaffSignIn('admin@example.ie', 'password'),
+    ).resolves.toEqual({ kind: 'staffSignedIn' })
+    // No enrollment started, and the Cognito session is kept (nothing signed out).
+    expect(sdk.associated).toBe(0)
+    expect(sdk.signOuts).toBe(0)
+  })
+
+  it('cannot bypass a server-issued TOTP challenge even with the dev flag on', async () => {
+    // The flag lives in `onSuccess`. Once an account has a PREFERRED software token Cognito
+    // challenges first, so the only fix for an already-enrolled user is server-side.
+    sdk.scenario = 'totp'
+    sdk.devDisableStaffTotp = true
+    await expect(
+      cognitoAuthProvider.beginStaffSignIn('admin@example.ie', 'password'),
+    ).resolves.toEqual({ kind: 'totpChallenge' })
+  })
+
+  it('keeps kitchen accounts out of the panel even with the dev bypass on', async () => {
+    sdk.scenario = 'success'
+    sdk.devDisableStaffTotp = true
+    sdk.successGroups = ['restaurant_staff']
+    await expect(
+      cognitoAuthProvider.beginStaffSignIn('kitchen@example.ie', 'password'),
+    ).resolves.toEqual({ kind: 'staffReady' })
     expect(sdk.signOuts).toBe(1)
   })
 

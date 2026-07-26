@@ -80,7 +80,12 @@ sign-in page.
   `/signin`; staff must use the designated staff page).
 - **Staff** `beginStaffSignIn` (used only by `src/admin/staff-sign-in.tsx`, at the config-driven
   `VITE_STAFF_SIGN_IN_PATH`): password → shared `staffAuthCallbacks` routing →
-  - `admin`/`restaurant_manager` → **mandatory TOTP** (enroll if none, else challenge) → `/admin`;
+  - `admin`/`restaurant_manager` → **mandatory TOTP** (enroll if none, else challenge) → `/admin`.
+    **Dev-only exception**: `VITE_DEV_DISABLE_STAFF_TOTP=true` skips the gate entirely
+    (`staffSignedIn` step, password only). It fails closed — honoured only on the Vite dev server
+    or a `VITE_DEPLOY_ENV=dev` bundle, and `vite build` refuses any other bundle that sets it. It
+    also only works for accounts with **no preferred software token**: once enrolled, Cognito
+    challenges before `onSuccess`, and clearing that needs `admin-set-user-mfa-preference`;
   - `restaurant_staff` (kitchen) → terminal **`staffReady`** card (they work on the dashboard/Orderpad,
     not this panel) — signed out, no panel session;
   - `NEW_PASSWORD_REQUIRED` (admin-created temp-password accounts) → **`completeStaffNewPassword`** sets

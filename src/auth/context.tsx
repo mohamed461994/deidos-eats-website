@@ -185,21 +185,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const normalizedEmail = signInEmail.trim()
       const step = await provider.beginStaffSignIn(normalizedEmail, password)
       setStaffEmail(normalizedEmail)
-      setStaffMfaStep(step)
       setStaffVerified(false)
+      if (step.kind === 'staffSignedIn') {
+        // Dev-only TOTP bypass: authentication is already complete, so run the finalization
+        // confirmStaffMfa would have run. Deliberately NOT published as a step — the sign-in
+        // page renders any unrecognised step as the authenticator form, and `GET /me` below
+        // can take seconds on a cold (auto-paused) dev Aurora. Leaving the step null keeps
+        // the credentials card and its pending spinner on screen until the panel opens.
+        await finishStaffSession()
+        return step
+      }
+      setStaffMfaStep(step)
       return step
     },
-    [clearLocalIdentity],
+    [clearLocalIdentity, finishStaffSession],
   )
 
-  const completeStaffNewPassword = useCallback(async (newPassword: string) => {
-    // Advance the same step machine the credentials step drives: the next step is TOTP
-    // enrollment/challenge (admin/manager) or the terminal `staffReady` card (kitchen staff, which
-    // stays signedOut). finishStaffSession runs later, from confirmStaffMfa.
-    const step = await provider.completeStaffNewPassword(newPassword)
-    setStaffMfaStep(step)
-    return step
-  }, [])
+  const completeStaffNewPassword = useCallback(
+    async (newPassword: string) => {
+      // Advance the same step machine the credentials step drives: the next step is TOTP
+      // enrollment/challenge (admin/manager) or the terminal `staffReady` card (kitchen staff,
+      // which stays signedOut). finishStaffSession runs later, from confirmStaffMfa — except in
+      // the dev-only `staffSignedIn` bypass, where it runs right here.
+      const step = await provider.completeStaffNewPassword(newPassword)
+      if (step.kind === 'staffSignedIn') {
+        await finishStaffSession()
+        return step
+      }
+      setStaffMfaStep(step)
+      return step
+    },
+    [finishStaffSession],
+  )
 
   const confirmStaffMfa = useCallback(
     async (code: string) => {

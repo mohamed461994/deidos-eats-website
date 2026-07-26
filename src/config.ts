@@ -24,6 +24,17 @@ export const config = {
   staffSignInPath: normalizeStaffSignInPath(env.VITE_STAFF_SIGN_IN_PATH),
   stripePublishableKey: (env.VITE_STRIPE_PUBLISHABLE_KEY as string | undefined) ?? '',
   restaurantId: (env.VITE_RESTAURANT_ID as string | undefined) ?? '',
+  /**
+   * Dev-only escape hatch: open the staff/admin panel on a password alone, skipping the
+   * TOTP enrollment/challenge gate. Fails CLOSED, and deliberately does NOT key off
+   * `import.meta.env.PROD` the way the mock guard does — the deployed dev site is itself a
+   * production-mode `vite build`. It is honoured only on the Vite dev server or in a bundle
+   * explicitly stamped VITE_DEPLOY_ENV=dev by deploy-website.yml, so a production bundle
+   * ignores the flag even if someone sets it.
+   */
+  devDisableStaffTotp:
+    env.VITE_DEV_DISABLE_STAFF_TOTP === 'true' &&
+    (env.DEV === true || env.VITE_DEPLOY_ENV === 'dev'),
 } as const
 
 export const isMock = config.apiMode === 'mock'

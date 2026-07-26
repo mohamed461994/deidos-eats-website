@@ -31,6 +31,17 @@ export default defineConfig(({ mode }) => {
       )
     }
     if (env.VITE_STAFF_SIGN_IN_PATH) normalizeStaffSignInPath(env.VITE_STAFF_SIGN_IN_PATH)
+    // The staff-TOTP escape hatch is dev-only, but the deployed DEV site is also a
+    // production-mode build — so this keys on VITE_DEPLOY_ENV (written by
+    // deploy-website.yml) instead of the mode. config.ts already ignores the flag
+    // without that marker; failing the build here makes the misconfiguration loud
+    // rather than silently shipping a bundle whose flag does nothing.
+    if (env.VITE_DEV_DISABLE_STAFF_TOTP === 'true' && env.VITE_DEPLOY_ENV !== 'dev') {
+      throw new Error(
+        'Refusing to build: VITE_DEV_DISABLE_STAFF_TOTP=true without VITE_DEPLOY_ENV=dev. ' +
+          'The staff/admin authenticator gate must stay enforced in production bundles.',
+      )
+    }
   }
 
   return {

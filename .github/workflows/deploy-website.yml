@@ -126,6 +126,8 @@ jobs:
           VITE_STAFF_SIGN_IN_PATH=${{ vars.VITE_STAFF_SIGN_IN_PATH || '/access/hall-47' }}
           VITE_STRIPE_PUBLISHABLE_KEY=${{ vars.VITE_STRIPE_PUBLISHABLE_KEY || 'pk_test_51TjmgMDJtx90rYI3kZcflO8lH3Ft1R7sG3FQMlao14mb8PESo2hRRUzSa3VuCqxzNIzdKegw9WUEuCbzMsvBh6oF00p1g6MAVh' }}
           VITE_RESTAURANT_ID=${{ vars.VITE_RESTAURANT_ID || '' }}
+          VITE_DEPLOY_ENV=${{ inputs.environment }}
+          VITE_DEV_DISABLE_STAFF_TOTP=${{ inputs.environment == 'dev' && 'true' || 'false' }}
           EOF
           echo "Wrote .env.production (VITE_API_MODE=live)"
 
