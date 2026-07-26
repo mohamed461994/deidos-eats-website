@@ -44,7 +44,7 @@ jobs:
     environment: ${{ inputs.environment }}
     env:
       AWS_REGION: eu-west-1
-      DEV_AWS_ACCOUNT_ID: "384489630788"
+      DEV_AWS_ACCOUNT_ID: "234062920252"
       PROD_AWS_ACCOUNT_ID: "818561370745"
       DEV_DEPLOY_ROLE_NAME: DeidosEatsWebsiteDeployRoleDev
       PROD_DEPLOY_ROLE_NAME: DeidosEatsWebsiteDeployRoleProd
