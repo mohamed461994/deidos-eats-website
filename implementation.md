@@ -30,8 +30,8 @@ What enforces it now:
    sole legitimate consumer of `src/api/mock/*` and `src/auth/mock.ts`. Do not add new
    mock features; once live E2E coverage exists, removing mock mode entirely is the
    end state.
-4. **Same identity as iOS**: shared buyer pool `eu-west-1_iah1mG6kG` with a
-   website-specific app client (`4033eub2av4ulr8mi32gu2evhv`), accepted by the dev API
+4. **Same identity as iOS**: shared buyer pool `eu-west-1_bhX21L8aG` with a
+   website-specific app client (`4l5bdd23ptea97e6vm1an910pt`), accepted by the dev API
    verifier (`COGNITO_WEBSITE_CLIENT_ID` — already deployed on the dev Lambda). Same
    pool → same `sub` → same `users` row, so profile edits made on the website are the
    ones iOS sees, and vice versa.
@@ -73,7 +73,7 @@ Separate API Gateway WS API: `wss://…execute-api.eu-west-1…/{stage}?token=<a
 Buyers are auto-subscribed to their own orders on `$connect` (no subscribe message).
 Messages are lightweight pokes `{type: 'order.placed'|'order.status_changed', orderId,
 branchId, status, previousStatus, occurredAt}` — on receipt, refetch `GET /orders/{id}`.
-Deployed in **dev** (`wss://s65u292zxd.execute-api.eu-west-1.amazonaws.com/dev`); **no prod
+Deployed in **dev** (`wss://dpnuhggizb.execute-api.eu-west-1.amazonaws.com/dev`); **no prod
 stack yet**. Polling `GET /orders/{id}` remains a supported fallback.
 
 ### Key domain rules the UI honors
@@ -239,10 +239,10 @@ values, kept in sync with the deployed dev platform:
 | Var | Dev value (committed) | Notes |
 |---|---|---|
 | `VITE_API_MODE` | `live` | live is also the code default; `mock` is test-only (`.env.test`) |
-| `VITE_API_BASE_URL` | `https://izio5wfs4g.execute-api.eu-west-1.amazonaws.com/dev` | dev proxy target (`/api` in the browser); prod has no URL yet |
-| `VITE_WS_URL` | `wss://s65u292zxd.execute-api.eu-west-1.amazonaws.com/dev` | dev WS; no prod stack yet |
-| `VITE_COGNITO_USER_POOL_ID` | `eu-west-1_iah1mG6kG` | shared buyer pool (same as iOS) |
-| `VITE_COGNITO_CLIENT_ID` | `4033eub2av4ulr8mi32gu2evhv` | website's own app client — do NOT reuse the iOS/dashboard client IDs |
+| `VITE_API_BASE_URL` | `https://uutrdnlbm0.execute-api.eu-west-1.amazonaws.com/dev` | dev proxy target (`/api` in the browser); prod has no URL yet |
+| `VITE_WS_URL` | `wss://dpnuhggizb.execute-api.eu-west-1.amazonaws.com/dev` | dev WS; no prod stack yet |
+| `VITE_COGNITO_USER_POOL_ID` | `eu-west-1_bhX21L8aG` | shared buyer pool (same as iOS) |
+| `VITE_COGNITO_CLIENT_ID` | `4l5bdd23ptea97e6vm1an910pt` | website's own app client — do NOT reuse the iOS/dashboard client IDs |
 | `VITE_STRIPE_PUBLISHABLE_KEY` | `pk_test_…` (same key iOS dev uses) | public by design; baked at build |
 | `VITE_RESTAURANT_ID` | (empty) | optional pin; defaults to first restaurant |
 
@@ -310,7 +310,7 @@ allowlist (§8.2).
 ## 8. Backend gaps that block full live functionality (ordered TODO)
 
 1. ~~**Cognito app client for the website**~~ ✅ **DONE (2026-07-06)** — the pool has a
-   website app client (`4033eub2av4ulr8mi32gu2evhv`, committed in `.env.development`),
+   website app client (`4l5bdd23ptea97e6vm1an910pt`, committed in `.env.development`),
    and the dev API Lambda already carries `COGNITO_WEBSITE_CLIENT_ID` in its accepted
    verifier list (`createAccessTokenVerifier`). Authed flows work in dev through the
    Vite proxy.
