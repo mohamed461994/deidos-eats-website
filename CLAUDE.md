@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-> Part of the **Deidos Eats** platform. See `../MASTER_BUILD_PLAN.md`, `../CI.md`, and `../CLAUDE.md`
+> Part of the **GoBites** platform. See `../MASTER_BUILD_PLAN.md`, `../CI.md`, and `../CLAUDE.md`
 > for the cross-repo picture, and `../WEBSITE_MARKETPLACE_PLAN.md` / `../HOME_ADMIN_PLAN.md` /
 > `../STAFF_ACCOUNTS_PLAN.md` for the multi-repo feature plans that touch this app. This repo is the
 > **buyer web app + brand site + staff/admin panel**; it consumes the `deidos-eats-contracts` OpenAPI
@@ -14,8 +14,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this repo is
 
 Vite + React 19 + TypeScript + Tailwind v4 + TanStack Query + react-router 7. The public buyer
-surface of Deidos Eats (discover → browse → cart → checkout → live order tracking) **plus** a
-staff/admin panel under `/admin`. Placeholder brand: **Púca Pizza** (platform identity "Deidos Eats"
+surface of GoBites (discover → browse → cart → checkout → live order tracking) **plus** a
+staff/admin panel under `/admin`. Placeholder brand: **Púca Pizza** (platform identity "GoBites"
 is a working name — everything is swappable semantic tokens, no fixed brand yet).
 
 Auth is **AWS Cognito via SRP** (`amazon-cognito-identity-js`, no hosted UI) against the shared buyer

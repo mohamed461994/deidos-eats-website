@@ -1,4 +1,4 @@
-# implementation.md — wiring the website to the live Deidos Eats API
+# implementation.md — wiring the website to the live GoBites API
 
 Contract version at time of writing: `@deidos-eats/contracts` **v0.16.0**.
 

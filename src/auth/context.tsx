@@ -42,6 +42,12 @@ interface AuthContextValue {
   status: AuthStatus
   email: string | null
   role: User['role'] | null
+  /**
+   * Additive capability grants from `GET /me` (today only `secrets_admin`), orthogonal to `role` —
+   * an `admin` does not imply any of them. Advisory: it decides what the panel renders, never what
+   * the server allows. Optional in the contract, so an older API answers as "no capabilities".
+   */
+  capabilities: string[]
   staffMfaStep: StaffSignInStep | null
   staffEmail: string | null
   staffVerified: boolean
@@ -63,6 +69,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthStatus>('restoring')
   const [email, setEmail] = useState<string | null>(null)
   const [role, setRole] = useState<User['role'] | null>(null)
+  const [capabilities, setCapabilities] = useState<string[]>([])
   const [staffMfaStep, setStaffMfaStep] = useState<StaffSignInStep | null>(null)
   const [staffEmail, setStaffEmail] = useState<string | null>(null)
   const [staffVerified, setStaffVerified] = useState(false)
@@ -72,6 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     sessionStorage.removeItem(STAFF_VERIFIED_SESSION_KEY)
     setEmail(null)
     setRole(null)
+    setCapabilities([])
     setStaffMfaStep(null)
     setStaffEmail(null)
     setStaffVerified(false)
@@ -89,6 +97,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       queryClient.setQueryData(queryKeys.me, user)
       setEmail(user.email)
       setRole(user.role)
+      // Fail closed: an API that omits the field grants nothing.
+      setCapabilities(user.capabilities ?? [])
       setStaffMfaStep(null)
       setStaffEmail(null)
       setStaffVerified(verifiedStaff)
@@ -259,6 +269,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       status,
       email,
       role,
+      capabilities,
       staffMfaStep,
       staffEmail,
       staffVerified,
@@ -277,6 +288,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       status,
       email,
       role,
+      capabilities,
       staffMfaStep,
       staffEmail,
       staffVerified,

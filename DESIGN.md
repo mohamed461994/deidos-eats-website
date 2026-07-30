@@ -1,7 +1,7 @@
 # Design
 
-Visual system for the **Deidos Eats** buyer marketplace. Two brand levels (see PRODUCT.md):
-the **platform** chrome (Deidos Eats) and each **restaurant's** API-driven brand inside
+Visual system for the **GoBites** buyer marketplace. Two brand levels (see PRODUCT.md):
+the **platform** chrome (GoBites) and each **restaurant's** API-driven brand inside
 `/r/:slug`. There is **one platform visual theme** today — per-restaurant theming (accent
 overrides on the `/r/:slug` subtree) is deferred. All token values below are the single
 source of truth and live in `src/theme/tokens.css`; components consume semantic tokens only.

@@ -39,4 +39,9 @@ export const adminApi = {
   resetAdminStaffPassword: isMock ? mock.resetAdminStaffPassword : live.resetAdminStaffPassword,
   disableAdminStaffMember: isMock ? mock.disableAdminStaffMember : live.disableAdminStaffMember,
   enableAdminStaffMember: isMock ? mock.enableAdminStaffMember : live.enableAdminStaffMember,
+  listManagedSecrets: isMock ? mock.listManagedSecrets : live.listManagedSecrets,
+  updateManagedSecret: isMock ? mock.updateManagedSecret : live.updateManagedSecret,
+  verifyManagedSecret: isMock ? mock.verifyManagedSecret : live.verifyManagedSecret,
+  rollbackManagedSecret: isMock ? mock.rollbackManagedSecret : live.rollbackManagedSecret,
+  setManagedSecretsPaused: isMock ? mock.setManagedSecretsPaused : live.setManagedSecretsPaused,
 }

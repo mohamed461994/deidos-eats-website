@@ -86,5 +86,18 @@ export type StaffBranchRole = Schemas['StaffBranchRole']
 export type ImageUploadRequest = Schemas['ImageUploadRequest']
 export type ImageUploadResponse = Schemas['ImageUploadResponse']
 
+/**
+ * Managed credentials. Note what is NOT here: no schema in this group carries a secret value —
+ * values travel one way only, in `ManagedSecretUpdateRequest`, and every response is metadata
+ * plus a truncated SHA-256 fingerprint.
+ */
+export type ManagedSecretId = Schemas['ManagedSecretId']
+export type ManagedSecret = Schemas['ManagedSecret']
+export type ManagedSecretField = Schemas['ManagedSecretField']
+export type ManagedSecretList = Schemas['ManagedSecretList']
+export type ManagedSecretUpdateRequest = Schemas['ManagedSecretUpdateRequest']
+export type ManagedSecretWriteResult = Schemas['ManagedSecretWriteResult']
+export type ManagedSecretVerifyResult = Schemas['ManagedSecretVerifyResult']
+
 export type ApiErrorBody = Schemas['Error']
 export type OrderChangedMessage = Schemas['OrderChangedMessage']

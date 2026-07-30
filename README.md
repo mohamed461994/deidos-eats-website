@@ -1,6 +1,6 @@
 # deidos-eats-website
 
-Customer-facing website for the Deidos Eats platform — public brand site **and** web
+Customer-facing website for the GoBites platform — public brand site **and** web
 ordering channel (browse → cart → checkout → live order tracking). Placeholder brand:
 **Púca Pizza** (all identity lives in swappable tokens; see `PRODUCT.md` and `DESIGN.md`).
 

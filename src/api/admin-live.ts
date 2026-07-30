@@ -31,6 +31,11 @@ import type {
   AdminStaffMemberUpdate,
   AdminStaffPasswordReset,
   StaffBranchMembershipList,
+  ManagedSecretId,
+  ManagedSecretList,
+  ManagedSecretUpdateRequest,
+  ManagedSecretVerifyResult,
+  ManagedSecretWriteResult,
 } from './types'
 import { apiRequest } from './http'
 
@@ -220,6 +225,41 @@ export async function disableAdminStaffMember(userId: string): Promise<AdminStaf
 
 export async function enableAdminStaffMember(userId: string): Promise<AdminStaffMember> {
   return apiRequest(`/admin/staff/${encodeURIComponent(userId)}/enable`, { method: 'POST' })
+}
+
+/**
+ * Managed credentials (`secrets_admin` only — `admin` gets a 403 here).
+ *
+ * The write is the only call in this module that carries credential material. It is deliberately
+ * plain: no retry, no interceptor, no logging. The value reaches `apiRequest` from the caller's
+ * component state and is gone as soon as this promise settles — nothing in the API layer keeps a
+ * reference, and no response shape can echo it back.
+ */
+export async function listManagedSecrets(): Promise<ManagedSecretList> {
+  return apiRequest('/admin/secrets')
+}
+
+export async function updateManagedSecret(
+  secretId: ManagedSecretId,
+  input: ManagedSecretUpdateRequest,
+): Promise<ManagedSecretWriteResult> {
+  return apiRequest(`/admin/secrets/${encodeURIComponent(secretId)}`, { method: 'PUT', body: input })
+}
+
+export async function verifyManagedSecret(
+  secretId: ManagedSecretId,
+): Promise<ManagedSecretVerifyResult> {
+  return apiRequest(`/admin/secrets/${encodeURIComponent(secretId)}/verify`, { method: 'POST' })
+}
+
+export async function rollbackManagedSecret(
+  secretId: ManagedSecretId,
+): Promise<ManagedSecretWriteResult> {
+  return apiRequest(`/admin/secrets/${encodeURIComponent(secretId)}/rollback`, { method: 'POST' })
+}
+
+export async function setManagedSecretsPaused(paused: boolean): Promise<void> {
+  await apiRequest(`/admin/secrets/${paused ? 'pause' : 'resume'}`, { method: 'POST' })
 }
 
 export async function uploadAdminImage(uploadUrl: string, file: File): Promise<void> {

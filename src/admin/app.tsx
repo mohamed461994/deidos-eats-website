@@ -5,6 +5,7 @@ import {
   FileText,
   Flag,
   Image,
+  KeyRound,
   LogOut,
   ShieldX,
   Users,
@@ -25,6 +26,7 @@ import { BranchesPage } from './branches'
 import { ContentPage } from './content'
 import { OvenPage } from './oven'
 import { RestaurantsPage } from './restaurants'
+import { SecretsPage } from './secrets'
 import { StaffPage } from './staff'
 
 interface PanelSection {
@@ -32,7 +34,14 @@ interface PanelSection {
   path: string
   icon: LucideIcon
   manager: boolean
+  /**
+   * An additive capability this section requires *instead of* a role. Sections carrying one are
+   * invisible to every role — including `admin` — unless `GET /me` grants the capability.
+   */
+  capability?: string
 }
+
+const SECRETS_ADMIN_CAPABILITY = 'secrets_admin'
 
 const SECTIONS: PanelSection[] = [
   { label: 'Discounts', path: '/admin/discounts', icon: BadgePercent, manager: true },
@@ -42,6 +51,13 @@ const SECTIONS: PanelSection[] = [
   { label: 'Restaurants', path: '/admin/restaurants', icon: Building2, manager: false },
   { label: 'Branches', path: '/admin/branches', icon: Flag, manager: false },
   { label: 'Staff', path: '/admin/staff', icon: Users, manager: false },
+  {
+    label: 'Secrets',
+    path: '/admin/secrets',
+    icon: KeyRound,
+    manager: false,
+    capability: SECRETS_ADMIN_CAPABILITY,
+  },
 ]
 
 function LoadingGate() {
@@ -78,9 +94,16 @@ function AccessDenied() {
 }
 
 function PanelShell() {
-  const { email, role, signOut } = useAuth()
+  const { email, role, capabilities, signOut } = useAuth()
   const navigate = useNavigate()
-  const sections = SECTIONS.filter((section) => role === 'admin' || section.manager)
+  const secretsAdmin = capabilities.includes(SECRETS_ADMIN_CAPABILITY)
+  // Capability sections are gated on the capability ALONE — `admin` never implies one. Cosmetic, as
+  // ever: the matching route below repeats the check, and the server is the real boundary.
+  const sections = SECTIONS.filter((section) =>
+    section.capability
+      ? capabilities.includes(section.capability)
+      : role === 'admin' || section.manager,
+  )
 
   async function leave() {
     await signOut()
@@ -96,9 +119,17 @@ function PanelShell() {
               <p className="text-lg font-[700] tracking-[-0.02em] text-basil-deep">{PLATFORM_NAME}</p>
               <p className="text-[13px] text-muted">Staff operations</p>
             </div>
-            <span className="rounded-full bg-basil-tint px-2.5 py-1 text-[12px] font-[650] text-basil-deep lg:mt-3 lg:inline-flex">
-              {role === 'admin' ? 'Administrator' : 'Restaurant manager'}
-            </span>
+            <div className="flex flex-wrap gap-1.5 lg:mt-3">
+              <span className="rounded-full bg-basil-tint px-2.5 py-1 text-[12px] font-[650] text-basil-deep">
+                {role === 'admin' ? 'Administrator' : 'Restaurant manager'}
+              </span>
+              {/* Named because holding it is unusual: it is granted outside the product and never implied. */}
+              {secretsAdmin && (
+                <span className="rounded-full bg-crust-tint px-2.5 py-1 text-[12px] font-[650] text-ink">
+                  Secrets admin
+                </span>
+              )}
+            </div>
           </div>
 
           <nav aria-label="Staff panel" className="flex gap-1 overflow-x-auto px-3 pb-3 lg:flex-col lg:overflow-visible lg:px-3 lg:pb-0">
@@ -159,6 +190,9 @@ function PanelShell() {
               <Route path="staff" element={<StaffPage />} />
             </>
           )}
+          {/* A sibling of the admin block, not a child of it: the gate is the capability, and an
+              admin without it must fall through to the redirect below. */}
+          {secretsAdmin && <Route path="secrets" element={<SecretsPage />} />}
           <Route path="*" element={<Navigate to={paths.adminDiscounts()} replace />} />
         </Routes>
       </div>

@@ -25,6 +25,11 @@ interface ProfileRecord {
    */
   confirmed?: boolean
   role?: User['role']
+  /**
+   * Additive capability groups (today only `secrets_admin`), orthogonal to `role` — the real API
+   * derives these from Cognito groups and returns them on `GET /me`.
+   */
+  capabilities?: string[]
   staffMfaEnrolled?: boolean
   staffBranchIds?: string[]
   /** Mirrors Cognito's FORCE_CHANGE_PASSWORD: the account must set a new password at first sign-in. */
@@ -84,6 +89,7 @@ function toUser(email: string, record: ProfileRecord): User {
     fullName: record.fullName,
     phone: record.phone,
     role: record.role ?? 'buyer',
+    capabilities: record.capabilities ?? [],
     createdAt: record.createdAt,
   }
 }
@@ -188,7 +194,12 @@ export const mockStore = {
   seedStaffForTests(
     email: string,
     role: Extract<User['role'], 'restaurant_staff' | 'admin' | 'restaurant_manager'>,
-    options: { mfaEnrolled?: boolean; branchIds?: string[]; mustSetPassword?: boolean } = {},
+    options: {
+      mfaEnrolled?: boolean
+      branchIds?: string[]
+      mustSetPassword?: boolean
+      capabilities?: string[]
+    } = {},
   ) {
     const key = normalizeEmail(email)
     state.profiles[key] = {
@@ -203,6 +214,7 @@ export const mockStore = {
       createdAt: state.profiles[key]?.createdAt ?? new Date().toISOString(),
       confirmed: true,
       role,
+      capabilities: options.capabilities ?? [],
       staffMfaEnrolled: options.mfaEnrolled ?? false,
       staffBranchIds: options.branchIds ?? [],
       mustSetPassword: options.mustSetPassword ?? false,

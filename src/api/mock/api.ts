@@ -38,6 +38,11 @@ import type {
   MenuCatalogPage,
   MenuItem,
   MenuItemUpdate,
+  ManagedSecretId,
+  ManagedSecretList,
+  ManagedSecretUpdateRequest,
+  ManagedSecretVerifyResult,
+  ManagedSecretWriteResult,
   OvenFeature,
   OvenFeatureCreate,
   OvenFeatureList,
@@ -67,6 +72,14 @@ import {
   resetMockAdminForTests,
   updateMockPromo,
 } from './admin'
+import {
+  listManagedSecretsForTests,
+  resetAdminSecretsForTests,
+  rollbackManagedSecretForTests,
+  setManagedSecretsPausedForTests,
+  updateManagedSecretForTests,
+  verifyManagedSecretForTests,
+} from './admin-secrets'
 import {
   createAdminStaffForTests,
   disableAdminStaffMemberForTests,
@@ -236,6 +249,7 @@ export function resetMockApiForTests() {
   resetMockAdminForTests()
   resetMockAdminContentForTests()
   resetAdminStaffForTests()
+  resetAdminSecretsForTests()
 }
 
 export { bumpMockPromoTokenForTests }
@@ -700,6 +714,56 @@ export async function enableAdminStaffMember(userId: string): Promise<AdminStaff
   await delay()
   requireAdmin()
   return enableAdminStaffMemberForTests(userId)
+}
+
+/**
+ * Managed credentials are gated on the CAPABILITY, not the role — mirroring `secretsAdminOnly` on
+ * the server, where a plain `admin` is 403. Getting this wrong in the mock would let a test pass
+ * against a gate the real API does not have.
+ */
+function requireSecretsAdmin(): User {
+  const user = requireUser()
+  if (!(user.capabilities ?? []).includes('secrets_admin')) {
+    fail(403, 'forbidden', 'This action requires secrets administrator access.')
+  }
+  return user
+}
+
+export async function listManagedSecrets(): Promise<ManagedSecretList> {
+  await delay()
+  requireSecretsAdmin()
+  return listManagedSecretsForTests()
+}
+
+export async function updateManagedSecret(
+  secretId: ManagedSecretId,
+  input: ManagedSecretUpdateRequest,
+): Promise<ManagedSecretWriteResult> {
+  await delay()
+  const user = requireSecretsAdmin()
+  return updateManagedSecretForTests(secretId, input, user.email)
+}
+
+export async function verifyManagedSecret(
+  secretId: ManagedSecretId,
+): Promise<ManagedSecretVerifyResult> {
+  await delay()
+  requireSecretsAdmin()
+  return verifyManagedSecretForTests(secretId)
+}
+
+export async function rollbackManagedSecret(
+  secretId: ManagedSecretId,
+): Promise<ManagedSecretWriteResult> {
+  await delay()
+  const user = requireSecretsAdmin()
+  return rollbackManagedSecretForTests(secretId, user.email)
+}
+
+export async function setManagedSecretsPaused(paused: boolean): Promise<void> {
+  await delay()
+  requireSecretsAdmin()
+  setManagedSecretsPausedForTests(paused)
 }
 
 export async function listAdminBanners(cursor?: string): Promise<AdminBannerList> {

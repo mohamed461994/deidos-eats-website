@@ -85,7 +85,7 @@ export function RestaurantHomePage() {
         {restaurant.marketplaceStatus === 'comingSoon' ? (
           <EmptyState
             title="Coming soon"
-            body={`${restaurant.name} is getting ready to open on Deidos Eats. Check back soon to place your first order.`}
+            body={`${restaurant.name} is getting ready to open on GoBites. Check back soon to place your first order.`}
           />
         ) : restaurant.branches.length === 0 ? (
           <EmptyState

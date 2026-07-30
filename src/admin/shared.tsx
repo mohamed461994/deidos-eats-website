@@ -187,34 +187,73 @@ interface ConfirmActionProps {
   confirmLabel: string
   destructive?: boolean
   pending?: boolean
+  /**
+   * Require the operator to type this exact phrase before the confirm button enables. A **mis-click
+   * guard, not an authorization control** — the phrase is visible on screen and carries no secrecy;
+   * it only makes "which one am I changing?" impossible to answer by accident. Reserve it for
+   * actions where hitting the wrong row has real consequences.
+   */
+  confirmPhrase?: string
+  confirmPhraseLabel?: string
+  /** Receives the typed phrase when `confirmPhrase` is set, so callers can forward it to the API. */
+  onConfirm: (typedPhrase: string) => void
   onOpenChange: (open: boolean) => void
-  onConfirm: () => void
 }
 
-export function ConfirmAction({
-  open,
-  title,
+export function ConfirmAction({ open, title, ...rest }: ConfirmActionProps) {
+  return (
+    <Modal open={open} onOpenChange={rest.onOpenChange} title={title}>
+      {/* Radix unmounts dialog content while closed, so the typed phrase below resets on every open
+          without an effect. A phrase left over from a previous open would let the next action
+          through untyped. */}
+      <ConfirmActionBody {...rest} />
+    </Modal>
+  )
+}
+
+function ConfirmActionBody({
   body,
   confirmLabel,
   destructive = false,
   pending = false,
+  confirmPhrase,
+  confirmPhraseLabel,
   onOpenChange,
   onConfirm,
-}: ConfirmActionProps) {
+}: Omit<ConfirmActionProps, 'open' | 'title'>) {
+  const [typed, setTyped] = useState('')
+  const matches = confirmPhrase === undefined || typed === confirmPhrase
+
   return (
-    <Modal open={open} onOpenChange={onOpenChange} title={title}>
-      <div className="overflow-y-auto px-6 pt-2 pb-6">
-        <div className="text-[15px] text-muted">{body}</div>
-        <div className="mt-7 flex justify-end gap-2 border-t border-border pt-4">
-          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={pending}>
-            Cancel
-          </Button>
-          <Button variant={destructive ? 'destructive' : 'primary'} loading={pending} onClick={onConfirm}>
-            {confirmLabel}
-          </Button>
+    <div className="overflow-y-auto px-6 pt-2 pb-6">
+      <div className="text-[15px] text-muted">{body}</div>
+      {confirmPhrase !== undefined && (
+        <div className="mt-5">
+          <TextField
+            label={confirmPhraseLabel ?? `Type ${confirmPhrase} to confirm`}
+            autoComplete="off"
+            spellCheck={false}
+            autoFocus
+            value={typed}
+            onChange={(event) => setTyped(event.target.value)}
+            hint="Guards against changing the wrong one — it is not a password."
+          />
         </div>
+      )}
+      <div className="mt-7 flex justify-end gap-2 border-t border-border pt-4">
+        <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={pending}>
+          Cancel
+        </Button>
+        <Button
+          variant={destructive ? 'destructive' : 'primary'}
+          loading={pending}
+          disabled={!matches}
+          onClick={() => onConfirm(typed)}
+        >
+          {confirmLabel}
+        </Button>
       </div>
-    </Modal>
+    </div>
   )
 }
 

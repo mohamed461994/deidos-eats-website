@@ -19,4 +19,5 @@ export const paths = {
   admin: () => '/admin',
   adminDiscounts: () => '/admin/discounts',
   adminStaff: () => '/admin/staff',
+  adminSecrets: () => '/admin/secrets',
 } as const

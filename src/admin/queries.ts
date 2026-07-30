@@ -9,6 +9,8 @@ import type {
   AdminStaffCreate,
   AdminStaffMember,
   AdminStaffMemberUpdate,
+  ManagedSecretId,
+  ManagedSecretUpdateRequest,
   MenuCatalogItem,
   MenuItemUpdate,
   OvenFeature,
@@ -32,6 +34,7 @@ export const adminQueryKeys = {
   ovenFeatures: ['admin', 'oven-features'] as const,
   content: ['admin', 'content'] as const,
   staff: ['admin', 'staff'] as const,
+  secrets: ['admin', 'secrets'] as const,
   catalog: (branchId: string) => ['admin', 'promo-catalog', branchId] as const,
 }
 
@@ -253,5 +256,61 @@ export function useSetAdminStaffDisabled() {
     mutationFn: ({ userId, disabled }: { userId: string; disabled: boolean }) =>
       disabled ? adminApi.disableAdminStaffMember(userId) : adminApi.enableAdminStaffMember(userId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: adminQueryKeys.staff }),
+  })
+}
+
+/* ---- managed credentials -------------------------------------------------------------------- */
+
+/**
+ * Credential STATUS only: fingerprints, timestamps, pause state. No operation in this group returns
+ * a credential value, so there is nothing here a cache could leak — and that is a property to keep,
+ * not an accident. `staleTime: 0` because the interesting field (`inUseFingerprint`) is per-container
+ * and changes under you as servers recycle; a stale read would make drift look resolved.
+ */
+export function useManagedSecrets() {
+  return useQuery({
+    queryKey: adminQueryKeys.secrets,
+    queryFn: () => adminApi.listManagedSecrets(),
+    staleTime: 0,
+  })
+}
+
+/**
+ * The one mutation in the app that carries credential material. `gcTime: 0` drops the response and
+ * the submitted `variables` as soon as the last observer detaches — but a mounted form IS an
+ * observer, so the caller must also clear its own state and call `.reset()`. Same discipline as the
+ * one-time temporary password in `useCreateAdminStaff`, for a value that is even more sensitive.
+ */
+export function useUpdateManagedSecret() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ secretId, input }: { secretId: ManagedSecretId; input: ManagedSecretUpdateRequest }) =>
+      adminApi.updateManagedSecret(secretId, input),
+    gcTime: 0,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: adminQueryKeys.secrets }),
+  })
+}
+
+export function useVerifyManagedSecret() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (secretId: ManagedSecretId) => adminApi.verifyManagedSecret(secretId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: adminQueryKeys.secrets }),
+  })
+}
+
+export function useRollbackManagedSecret() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (secretId: ManagedSecretId) => adminApi.rollbackManagedSecret(secretId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: adminQueryKeys.secrets }),
+  })
+}
+
+export function useSetManagedSecretsPaused() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (paused: boolean) => adminApi.setManagedSecretsPaused(paused),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: adminQueryKeys.secrets }),
   })
 }

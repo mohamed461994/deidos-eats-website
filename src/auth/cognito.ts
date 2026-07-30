@@ -328,7 +328,7 @@ export const cognitoAuthProvider: AuthProvider = {
       if (mode === 'challenge') {
         user.sendMFACode(code, { onSuccess, onFailure }, 'SOFTWARE_TOKEN_MFA')
       } else {
-        user.verifySoftwareToken(code, 'Deidos Eats staff panel', { onSuccess, onFailure })
+        user.verifySoftwareToken(code, 'GoBites staff panel', { onSuccess, onFailure })
       }
     })
   },

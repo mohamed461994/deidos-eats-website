@@ -1,5 +1,5 @@
 /**
- * Runtime configuration. `live` (the default) targets the real Deidos Eats
+ * Runtime configuration. `live` (the default) targets the real GoBites
  * API — the same backend and user data as the iOS app — through the Vite
  * /api proxy in dev (the API has no browser CORS support yet — see
  * implementation.md). `mock` exists ONLY for the unit-test harness (set via

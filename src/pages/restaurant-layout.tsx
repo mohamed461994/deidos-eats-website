@@ -49,7 +49,7 @@ export function RestaurantLayout() {
           <p className="text-sm font-[650] text-muted">404</p>
           <h1 className="display text-4xl">We can't find that restaurant.</h1>
           <p className="text-muted">
-            The link may be out of date, or the restaurant isn't on Deidos Eats yet. Browse the
+            The link may be out of date, or the restaurant isn't on GoBites yet. Browse the
             ones that are.
           </p>
           <Link

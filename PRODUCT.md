@@ -11,11 +11,11 @@ brand + platform
 > delivered by the API. **Checkout, order tracking, and account** flows switch to product
 > register: familiar, fast, state-rich, zero decoration in the way of the task. The
 > **platform chrome** around all of it (header, footer, 404, auth) is a third, quiet
-> register: Deidos Eats frames, it never competes with the restaurant it's framing.
+> register: GoBites frames, it never competes with the restaurant it's framing.
 
 ## Users
 
-Hungry people in Ireland ordering from restaurants on the **Deidos Eats** marketplace — on
+Hungry people in Ireland ordering from restaurants on the **GoBites** marketplace — on
 the couch, on a lunch break, walking home. The marketplace launches with **two
 hand-onboarded restaurants** and is built to add more without a redesign. Users want to see
 the food, pick a branch that can actually feed them, order in under two minutes, and know
@@ -32,7 +32,7 @@ without shipping dead marketplace chrome now.
 
 ## Product Purpose
 
-The public buyer surface of the Deidos Eats platform (existing AWS serverless API). It does
+The public buyer surface of the GoBites platform (existing AWS serverless API). It does
 four jobs, in order: **discover** (pick a nearby branch from the admin-managed home — every
 card one tap from that branch's menu), **browse** (appetite-forward menu that sells the
 food, per restaurant + branch), **order** (branch → cart → checkout → live tracking), and
@@ -46,7 +46,7 @@ explicit, confirmed action that starts the basket fresh.
 
 ## Brand model — two levels
 
-1. **Platform brand — Deidos Eats.** The chrome: header wordmark, footer, 404, auth pages,
+1. **Platform brand — GoBites.** The chrome: header wordmark, footer, 404, auth pages,
    document/SEO metadata. Calm, trustworthy, gets out of the way. It is the *shelf*, not the
    product on it.
 2. **Restaurant brand — API-driven.** Everything inside `/r/:slug` presents the restaurant's
@@ -56,14 +56,14 @@ explicit, confirmed action that starts the basket fresh.
    restaurant's *content and imagery* carry its personality within that theme.
 
 *Both brands are still placeholders.* The dev dataset seeds real restaurants (e.g. Deidos
-Grill); the platform identity ("Deidos Eats") is a working name. As with the dashboard and
+Grill); the platform identity ("GoBites") is a working name. As with the dashboard and
 iOS app, every colour / font / radius lives in swappable semantic tokens (see DESIGN.md) so a
 real platform identity — and, later, per-restaurant accents — can be dropped in without
 touching component code.
 
 ## Personality
 
-- **Platform (Deidos Eats):** quiet confidence, competent, warm-but-neutral. Never louder
+- **Platform (GoBites):** quiet confidence, competent, warm-but-neutral. Never louder
   than the restaurant. Think a well-run indoor market hall, not a billboard.
 - **Restaurant:** whatever the restaurant's own brand is — carried by its copy, menu, and
   photography, framed consistently by the platform.

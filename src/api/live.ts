@@ -1,5 +1,5 @@
 /**
- * LIVE adapters — thin typed wrappers over the real Deidos Eats API.
+ * LIVE adapters — thin typed wrappers over the real GoBites API.
  * Note: browser calls only work through the Vite /api dev proxy until the API
  * ships CORS headers for the website origin (see implementation.md).
  */
