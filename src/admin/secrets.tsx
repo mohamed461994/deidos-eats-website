@@ -20,8 +20,7 @@ import {
 } from 'lucide-react'
 import { useState, type FormEvent, type ReactNode } from 'react'
 
-import { errorMessage } from '@/api'
-import { ApiError } from '@/api/errors'
+import { errorMessage, isApiError } from '@/api'
 import type {
   ManagedSecret,
   ManagedSecretField,
@@ -35,6 +34,7 @@ import { TextAreaField, TextField } from '@/components/ui/field'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useToast } from '@/components/ui/toast'
 
+import { formatBranchDateTime } from './local-time'
 import {
   useManagedSecrets,
   useRollbackManagedSecret,
@@ -89,12 +89,13 @@ const AFTER_ROTATION: Partial<Record<ManagedSecretId, string>> = {
 }
 
 function formatWhen(value: string | null | undefined): string {
-  if (!value) return '—'
-  return new Intl.DateTimeFormat('en-IE', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-    timeZone: DISPLAY_TIMEZONE,
-  }).format(new Date(value))
+  return value ? formatBranchDateTime(value, DISPLAY_TIMEZONE) : '—'
+}
+
+/** The trailing "and don't forget the worker" sentence, or nothing. */
+function afterRotationNote(id: ManagedSecretId): string {
+  const note = AFTER_ROTATION[id]
+  return note ? ` ${note}` : ''
 }
 
 type SyncState =
@@ -112,11 +113,17 @@ type SyncState =
  * nothing, which *is* drift when something is stored. Testing with `in` is the only way to keep the
  * two apart; `??` or `== null` would silently report unknown as clean.
  */
+function inUseIsKnowable(secret: ManagedSecret): boolean {
+  return 'inUseFingerprint' in secret
+}
+
 function syncStateOf(secret: ManagedSecret): SyncState {
-  if (!('inUseFingerprint' in secret)) return { kind: 'unknown' }
+  const knowable = inUseIsKnowable(secret)
   const stored = secret.fingerprint ?? null
-  const inUse = secret.inUseFingerprint ?? null
+  const inUse = knowable ? (secret.inUseFingerprint ?? null) : null
+  // Nothing stored and nothing in use: there is no rollout to report, knowable or not.
   if (stored === null && inUse === null) return { kind: 'unconfigured' }
+  if (!knowable) return { kind: 'unknown' }
   if (stored === inUse) return { kind: 'inSync' }
   if (stored === null) return { kind: 'drift', reason: 'serverKeyNotStored' }
   return { kind: 'drift', reason: inUse === null ? 'serverHasNoKey' : 'serverOnOldKey' }
@@ -124,7 +131,7 @@ function syncStateOf(secret: ManagedSecret): SyncState {
 
 /** Per-field 422 messages from the API. They name the field and the expected shape, never the value. */
 function fieldIssuesOf(error: unknown): Record<string, string> {
-  if (!(error instanceof ApiError)) return {}
+  if (!isApiError(error)) return {}
   const issues = (error.details as { issues?: unknown } | undefined)?.issues
   if (!Array.isArray(issues)) return {}
   return Object.fromEntries(
@@ -213,9 +220,11 @@ function SyncNotice({ secret, onRefresh, refreshing }: { secret: ManagedSecret; 
   const sync = syncStateOf(secret)
   if (sync.kind === 'unconfigured') return null
 
+  // Only drift gets a tinted banner. The settled states stay plain lines so the one state that
+  // needs an operator's attention is the only one that looks like it does.
   if (sync.kind === 'unknown') {
     return (
-      <div className="flex items-start gap-2.5 rounded-[12px] bg-surface px-4 py-3">
+      <div className="flex items-start gap-2.5">
         <CircleHelp className="mt-0.5 size-4 shrink-0 text-muted" aria-hidden />
         <p className="text-[13px] text-ink">
           In-use key unknown for this integration.{' '}
@@ -230,7 +239,7 @@ function SyncNotice({ secret, onRefresh, refreshing }: { secret: ManagedSecret; 
 
   if (sync.kind === 'inSync') {
     return (
-      <div className="flex items-start gap-2.5 rounded-[12px] bg-basil-tint px-4 py-3">
+      <div className="flex items-start gap-2.5">
         <Check className="mt-0.5 size-4 shrink-0 text-basil" aria-hidden />
         <p className="text-[13px] text-ink">
           Stored key matches the key in use.{' '}
@@ -256,7 +265,7 @@ function SyncNotice({ secret, onRefresh, refreshing }: { secret: ManagedSecret; 
           <p className="mt-1 text-[13px] text-muted">
             The in-use value is what the single server that answered this request holds — two refreshes can
             legitimately disagree while containers recycle. Refresh until every answer matches.
-            {AFTER_ROTATION[secret.id] ? ` ${AFTER_ROTATION[secret.id]}` : ''}
+            {afterRotationNote(secret.id)}
           </p>
           <Button size="sm" variant="outline" className="mt-3" loading={refreshing} onClick={onRefresh}>
             <RefreshCw className="size-3.5" aria-hidden />
@@ -276,6 +285,7 @@ function SecretValueField({
   value,
   error,
   disabled,
+  autoFocus,
   onChange,
 }: {
   field: ManagedSecretField
@@ -283,6 +293,7 @@ function SecretValueField({
   value: string
   error?: string
   disabled: boolean
+  autoFocus?: boolean
   onChange: (value: string) => void
 }) {
   const meta = FIELD_META[`${secretId}.${field.name}`]
@@ -306,6 +317,7 @@ function SecretValueField({
         hint={hint}
         error={error}
         disabled={disabled}
+        autoFocus={autoFocus}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         {...NO_CAPTURE}
@@ -320,6 +332,7 @@ function SecretValueField({
       hint={hint}
       error={error}
       disabled={disabled}
+      autoFocus={autoFocus}
       value={value}
       onChange={(event) => onChange(event.target.value)}
       {...NO_CAPTURE}
@@ -403,7 +416,7 @@ function RotationForm({
       </div>
 
       <div className="mt-4 grid gap-4 sm:grid-cols-2">
-        {secret.fields.map((field) => (
+        {secret.fields.map((field, index) => (
           <SecretValueField
             key={field.name}
             field={field}
@@ -411,6 +424,9 @@ function RotationForm({
             value={values[field.name] ?? ''}
             error={fieldErrors[field.name]}
             disabled={update.isPending}
+            // Opening the form disables the Rotate button that opened it, which would otherwise
+            // drop keyboard focus to the body.
+            autoFocus={index === 0}
             onChange={(value) => setValues((current) => ({ ...current, [field.name]: value }))}
           />
         ))}
@@ -437,7 +453,8 @@ function RotationForm({
         confirmLabel="Store new value"
         pending={update.isPending}
         confirmPhrase={secret.id}
-        confirmPhraseLabel={`Type ${secret.id} to confirm`}
+        // Quoted: unquoted, the HERE credential's id turns the label into "Type here to confirm".
+        confirmPhraseLabel={`Type “${secret.id}” to confirm`}
         body={
           <>
             <p>
@@ -446,7 +463,7 @@ function RotationForm({
             </p>
             <p className="mt-3">
               Once stored, it goes live as servers recycle, not instantly.
-              {AFTER_ROTATION[secret.id] ? ` ${AFTER_ROTATION[secret.id]}` : ''}
+              {afterRotationNote(secret.id)}
             </p>
           </>
         }
@@ -461,7 +478,7 @@ function RotationForm({
 
 function WriteResult({ result, onDismiss }: { result: ManagedSecretWriteResult; onDismiss: () => void }) {
   return (
-    <div className="flex items-start justify-between gap-3 border-t border-border bg-basil-tint px-5 py-4">
+    <div role="status" className="flex items-start justify-between gap-3 border-t border-border bg-basil-tint px-5 py-4">
       <div className="min-w-0">
         <p className="text-[14px] font-[550] text-ink">
           Stored{result.verified ? ' and verified' : ''}. This is the only place the new version id appears.
@@ -578,7 +595,7 @@ function SecretCard({
             <Fingerprint value={secret.fingerprint} />
           </Detail>
           <Detail label="In use on this server">
-            {'inUseFingerprint' in secret ? (
+            {inUseIsKnowable(secret) ? (
               <Fingerprint value={secret.inUseFingerprint} />
             ) : (
               <span className="text-muted">Unknown</span>
@@ -623,8 +640,12 @@ function SecretCard({
           ))}
         </div>
 
+        {/* Says why Rotate is greyed out for a reader who has scrolled past the banner, and where
+            to undo it. */}
         {paused && (
-          <p className="text-[13px] text-muted">Rotation and rollback are paused for every credential.</p>
+          <p className="text-[13px] text-muted">
+            Changes are paused — resume them at the top of the page to rotate or roll back.
+          </p>
         )}
       </div>
 
@@ -637,9 +658,7 @@ function SecretCard({
       <ConfirmAction
         open={confirmRollback}
         title={`Roll back the ${secret.label} credential?`}
-        body={`Restores the previous stored value and makes it current again — the recovery path when a rotation turns out to be wrong. Like a rotation, the restored key goes live as servers recycle.${
-          AFTER_ROTATION[secret.id] ? ` ${AFTER_ROTATION[secret.id]}` : ''
-        }`}
+        body={`Restores the previous stored value and makes it current again — the recovery path when a rotation turns out to be wrong. Like a rotation, the restored key goes live as servers recycle.${afterRotationNote(secret.id)}`}
         confirmLabel="Roll back"
         destructive
         pending={rollback.isPending}
@@ -654,25 +673,19 @@ function SecretCard({
 
 export function SecretsPage() {
   const secrets = useManagedSecrets()
-  const [refreshing, setRefreshing] = useState(false)
-
-  async function refresh() {
-    setRefreshing(true)
-    try {
-      await secrets.refetch()
-    } finally {
-      setRefreshing(false)
-    }
-  }
+  // The query already reports its own in-flight refetch; a local `refreshing` flag would only
+  // duplicate it. During the first load the skeletons are showing, so no button reads this.
+  const refreshing = secrets.isFetching
+  const refresh = () => void secrets.refetch()
 
   return (
     <AdminPage>
       <PageHeader
         eyebrow="Platform credentials"
         title="Secrets"
-        description="Rotate the third-party keys the platform runs on. Values are write-only: they go to AWS Secrets Manager and are never returned, shown, logged, or kept in this browser — only a fingerprint comes back. A new key is tested against its provider before it is stored, and goes live as servers recycle."
+        description="Rotate the third-party keys the platform runs on. Values are write-only — they go straight to AWS Secrets Manager and never come back; this panel only ever sees a fingerprint. Every new key is tested against its provider before it is stored."
         action={
-          <Button variant="outline" loading={refreshing} onClick={() => void refresh()}>
+          <Button variant="outline" loading={refreshing} onClick={refresh}>
             <RefreshCw className="size-4" aria-hidden />
             Refresh status
           </Button>
@@ -707,7 +720,7 @@ export function SecretsPage() {
                 key={secret.id}
                 secret={secret}
                 paused={secrets.data.paused}
-                onRefresh={() => void refresh()}
+                onRefresh={refresh}
                 refreshing={refreshing}
               />
             ))}

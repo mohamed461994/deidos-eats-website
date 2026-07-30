@@ -230,7 +230,7 @@ function ConfirmActionBody({
       {confirmPhrase !== undefined && (
         <div className="mt-5">
           <TextField
-            label={confirmPhraseLabel ?? `Type ${confirmPhrase} to confirm`}
+            label={confirmPhraseLabel ?? `Type “${confirmPhrase}” to confirm`}
             autoComplete="off"
             spellCheck={false}
             autoFocus
